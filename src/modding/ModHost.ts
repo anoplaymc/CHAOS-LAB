@@ -1,4 +1,4 @@
-import { ChaosError, ChaosLimitError, closest, fromPlain, installStdlib, Interpreter, isCallable, lint, NativeFunction, parse, STD_GLOBALS, STD_NAMESPACES, Table, typeName, type Chunk, type Diagnostic, type Plain, type Value } from '../chaosscript';
+import { ChaosError, ChaosLimitError, closest, fromPlain, installStdlib, Interpreter, isCallable, lint, NativeFunction, parse, STD_GLOBALS, STD_NAMESPACES, Table, toPlain, typeName, type Chunk, type Diagnostic, type Plain, type Value } from '../chaosscript';
 import { catalog, type ItemDef } from '../data/items';
 import type { Loc } from '../data/materials';
 import { MAPS, type Game } from '../game/core/Game';
@@ -8,7 +8,9 @@ import { ALL_API, API_NAMESPACES } from './api';
 import type { ApiFn, Param } from './api/types';
 import { EVENT_NAMES } from './events';
 import { toColor, toVec3 } from './fields';
+import { parseForm } from './form';
 import type { Manifest } from './manifest';
+import { reservedKey } from '../game/core/input';
 import type { ModBundle, ModManager } from './ModManager';
 
 export type LogLevel = 'info' | 'warn' | 'error';
@@ -75,6 +77,8 @@ export class ModHost {
   readonly buttons: HostButton[] = [];
   private claimed = new Set<string>();
   private assets: Record<string, string>;
+  private keys = new Map<number, { code: string; fn: Value }>();
+  private formHandler: Value = null;
 
   constructor(readonly game: Game, readonly manager: ModManager, readonly manifest: Manifest, bundle: ModBundle, storage: Record<string, Plain> | null) {
     this.id = manifest.id;
@@ -217,7 +221,9 @@ export class ModHost {
     this.phase = 'faulted';
     this.faultReason = reason;
     this.timers = [];
+    this.keys.clear();
     this.clearSessionUi();
+    this.game.sandbox.releaseOwner(this.id);
     this.manager.logEntry(this.id, 'error', reason);
     this.game.toast(`${this.manifest.name}: ${this.game.t('mods.faulted')}`, 'error');
     this.manager.changed();
@@ -228,7 +234,9 @@ export class ModHost {
     this.handlers.clear();
     this.timers = [];
     this.buttons.length = 0;
+    this.keys.clear();
     this.clearSessionUi();
+    this.game.sandbox.releaseOwner(this.id);
     this.vm.roots.length = 0;
   }
 
@@ -461,7 +469,76 @@ export class ModHost {
     if (i >= 0) this.buttons.splice(i, 1);
   }
 
+  /** A rich panel: plain data that the game draws, and one handler for everything done in it. */
+  openForm(view: Table, handler: Value): void {
+    if (!this.vm.roots.includes(handler)) this.vm.roots.push(handler);
+    this.formHandler = handler;
+    this.setForm(view);
+    this.game.setOverlay('modform');
+  }
+
+  updateForm(view: Table): void {
+    if (this.game.ui.get().modForm?.owner === this.id) this.setForm(view);
+  }
+
+  private setForm(view: Table): void {
+    const send = (type: string, id: string, value: boolean | number | string | null) => {
+      if (this.formHandler !== null) this.invoke(this.formHandler, [fromPlain({ type, id, value })], 'panel');
+    };
+    this.game.ui.set({ modForm: parseForm(this.id, toPlain(view, 'ui panel view'), send) });
+  }
+
+  closeForm(): void {
+    if (this.game.ui.get().modForm?.owner !== this.id) return;
+    if (this.game.ui.get().overlay === 'modform') this.game.setOverlay(null);
+    this.game.ui.set({ modForm: null });
+  }
+
+  get formOpen(): boolean {
+    const ui = this.game.ui.get();
+    return ui.overlay === 'modform' && ui.modForm?.owner === this.id;
+  }
+
+  // ── Keys ──
+  bindKey(code: string, fn: Value): number {
+    if (!/^(F\d{1,2}|Key[A-Z]|Numpad\w+|Insert|Home|End|PageUp|PageDown|Pause|Semicolon|Quote|Comma|Period|Slash|Backslash)$/.test(code)) throw new ChaosError(`input.bind: "${code}" isn't a key that can be bound. Use a code such as "F6" or "KeyO".`);
+    if (reservedKey(code)) throw new ChaosError(`input.bind: "${code}" is reserved by the game or the browser.`);
+    if (this.keys.size >= 32) throw new ChaosError('input.bind: a mod can bind at most 32 keys.');
+    const id = this.nextId++;
+    this.keys.set(id, { code, fn });
+    this.vm.roots.push(fn);
+    return id;
+  }
+
+  unbindKey(id: number): boolean {
+    return this.keys.delete(id);
+  }
+
+  pressKey(code: string): boolean {
+    if (!this.alive) return false;
+    let used = false;
+    for (const k of [...this.keys.values()]) {
+      if (k.code !== code) continue;
+      used = true;
+      this.invoke(k.fn, [], `key ${code}`);
+    }
+    return used;
+  }
+
+  // ── Facts for diagnostics tools ──
+  apiEntries(word: string | null): { name: string; signature: string; doc: string; permission: string | null }[] {
+    const w = word?.toLowerCase() ?? '';
+    return ALL_API.map((f) => ({ name: `${f.ns}.${f.name}`, signature: signature(f), doc: f.doc, permission: f.perm ?? null })).filter((f) => !w || f.name.toLowerCase().includes(w) || f.doc.toLowerCase().includes(w));
+  }
+
+  stats(): Record<string, number | string> {
+    let handlers = 0;
+    for (const l of this.handlers.values()) handlers += l.length;
+    return { phase: this.phase, errors: this.errorCount, timers: this.timers.length, handlers, keys: this.keys.size, storage_bytes: this.storageBytes, heap_cells: this.vm.measureHeap() };
+  }
+
   private clearSessionUi(): void {
+    this.closeForm();
     if (this.panels.size) {
       const gone = this.panels;
       this.panels = new Set();

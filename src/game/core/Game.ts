@@ -44,6 +44,8 @@ import type { GameMode, ModeHud } from '../modes/GameMode';
 import { MODE_FACTORIES, PlaygroundMode } from '../modes/modes';
 import { PackManager } from '../mods/PackManager';
 import { ModManager, type ModMenu, type ModPanel } from '../../modding/ModManager';
+import type { ModForm } from '../../modding/form';
+import { SandboxControl } from '../../modding/SandboxControl';
 import { defaultModSources } from '../../modding/sources';
 import { applyScene, serializeScene } from '../save/sceneIO';
 import type { SaveFile } from '../save/schema';
@@ -128,7 +130,7 @@ export interface DebugInfo {
 
 export interface UiState {
   screen: 'menu' | 'playing';
-  overlay: 'spawn' | 'quick' | 'cleanup' | 'mod' | 'console' | null;
+  overlay: 'spawn' | 'quick' | 'cleanup' | 'mod' | 'modform' | 'console' | null;
   paused: boolean;
   needsClick: boolean;
   dead: boolean;
@@ -145,6 +147,7 @@ export interface UiState {
   sessionId: number;
   modPanels: ModPanel[];
   modMenu: ModMenu | null;
+  modForm: ModForm | null;
 }
 
 const AIM_RESULT = { origin: { x: 0, y: 0, z: 0 }, dir: { x: 0, y: 0, z: -1 } };
@@ -155,6 +158,8 @@ export class Game {
   readonly camera = new THREE.PerspectiveCamera(78, 16 / 9, 0.05, 600);
   readonly physics = new PhysicsWorld();
   readonly entities = new EntityManager(this);
+  /** Temporary overrides mods make. Each is undone when that mod stops, or when the session ends. */
+  readonly sandbox = new SandboxControl(this);
   readonly audio = new AudioEngine();
   readonly input = new Input();
   readonly player = new Player(this);
@@ -207,6 +212,7 @@ export class Game {
   private hudTimer = 0;
   private frameTimes: number[] = [];
   private physicsMs = 0;
+  private smoothFps = 60;
   private overloadTime = 0;
   private promptText: string | null = null;
   private promptTarget: Entity | null = null;
@@ -222,7 +228,7 @@ export class Game {
     this.mods = new ModManager(this);
     this.ui = new Store<UiState>({
       screen: 'menu', overlay: null, paused: false, needsClick: false, dead: false, damagePulse: 0, hud: null, toasts: [],
-      debug: false, debugInfo: null, overloaded: false, error: null, settings: this.settings, inspect: null, modeHud: null, sessionId: 0, modPanels: [], modMenu: null,
+      debug: false, debugInfo: null, overloaded: false, error: null, settings: this.settings, inspect: null, modeHud: null, sessionId: 0, modPanels: [], modMenu: null, modForm: null,
     });
     this.fx = new Effects(this.scene);
     this.entities.attach(this.scene);
@@ -282,6 +288,7 @@ export class Game {
     this.input.onLockChange = (locked) => this.handleLockChange(locked);
     this.input.onLockRefused = () => this.handleLockRefused();
     this.input.onGlobalAction = (a) => this.handleGlobalAction(a);
+    this.input.onModKey = (code) => this.mods.handleKey(code);
     this.fx.sparks.setViewportScale(this.renderer.pointScale);
     this.fx.smoke.setViewportScale(this.renderer.pointScale);
     this.start();
@@ -415,6 +422,13 @@ export class Game {
   setGravity(g: number): void {
     this.rules.gravity = g;
     this.physics.setGravity({ x: 0, y: -g, z: 0 });
+  }
+
+  /** The live lighting of the current map, for the sandbox environment controls. */
+  lightingHandles(): { def: MapDef; sun: THREE.DirectionalLight; hemi: THREE.HemisphereLight; sky: THREE.Mesh; fog: THREE.FogExp2 } | null {
+    const hemi = this.worldLights[0];
+    if (!this.map || !this.sun || !this.sky || !(hemi instanceof THREE.HemisphereLight) || !(this.scene.fog instanceof THREE.FogExp2)) return null;
+    return { def: this.map.def, sun: this.sun, hemi, sky: this.sky, fog: this.scene.fog };
   }
 
   // ── Saving ──
@@ -679,7 +693,7 @@ export class Game {
       mouse = this.input.consumeMouse();
       if (!this.tools.active.mouse(mouse.dx, mouse.dy)) this.player.look(mouse.dx, mouse.dy);
       this.handleFrameInput();
-      const steps = this.stepper.advance(dt);
+      const steps = this.stepper.advance(dt * this.sandbox.timeScale);
       const physStart = performance.now();
       for (let i = 0; i < steps; i++) this.fixedStep();
       this.physicsMs = performance.now() - physStart;
@@ -694,6 +708,7 @@ export class Game {
       this.connections.update();
       this.signals.update();
       this.fx.update(dt);
+      this.sandbox.overlays.update(dt);
       this.viewModel.setVisible(!this.player.driving && !this.player.dead);
       this.viewModel.update(dt, mouse.dx, mouse.dy, Math.min(1, this.player.speed / 8), this.time, this.settings.cameraMotion);
       this.updatePrompt();
@@ -704,6 +719,7 @@ export class Game {
       this.input.consumeMouse();
       if (this.physics.world) this.tools.flushReleases();
     }
+    if (dt > 0) this.smoothFps += (1 / dt - this.smoothFps) * 0.05;
     this.hudTimer -= dt;
     if (this.hudTimer <= 0) {
       this.hudTimer = 0.1;
@@ -867,9 +883,10 @@ export class Game {
   }
 
   damageEntity(e: Entity, amount: number, src: DamageSource): void {
-    if (e.dead || amount <= 0) return;
+    if (e.dead || amount <= 0 || e.invulnerable) return;
     const breakable = e.def.breakSpeed !== undefined || e.def.kind === 'npc';
     if (!breakable) return;
+    if (src.kind === 'player') amount *= this.sandbox.damageScale;
     e.health -= amount;
     for (const c of e.components) c.onDamage?.(amount, src);
     this.events.emit('entityDamaged', { entity: e, amount, source: src });
@@ -883,7 +900,8 @@ export class Game {
       return;
     }
     const b = hit.body;
-    if (b && b.isDynamic()) b.applyImpulseAtPoint({ x: dir.x * impulse, y: dir.y * impulse, z: dir.z * impulse }, hit.point, true);
+    const k = src.kind === 'player' ? impulse * this.sandbox.impulseScale : impulse;
+    if (b && b.isDynamic()) b.applyImpulseAtPoint({ x: dir.x * k, y: dir.y * k, z: dir.z * k }, hit.point, true);
     if (hit.owner instanceof Entity) this.damageEntity(hit.owner, damage, src);
   }
 
@@ -940,7 +958,8 @@ export class Game {
     this.blast(p, radius, impulse, damage, source, { kind: source ? 'npc' : 'player', entity: source, point: p });
   }
 
-  private blast(p: V3, radius: number, impulse: number, damage: number, source: Entity | null, src: DamageSource): void {
+  private blast(p: V3, radius: number, baseImpulse: number, damage: number, source: Entity | null, src: DamageSource): void {
+    const impulse = baseImpulse * this.sandbox.blastScale;
     this.physics.overlap(new RAPIER.Ball(radius), p, { x: 0, y: 0, z: 0, w: 1 }, Group.PROP | Group.NPC | Group.VEHICLE | Group.PROJECTILE, (c) => {
       const owner = this.physics.ownerOf(c);
       if (owner === source) return true;
@@ -960,7 +979,7 @@ export class Game {
       return true;
     });
     const pl = this.player;
-    if (pl.body && !pl.flying && !pl.driving) {
+    if (pl.body && !pl.flying && !pl.driving && !pl.god) {
       const q = pl.position;
       const d = Math.max(0.5, dist(q, p));
       if (d < radius) {
@@ -1174,6 +1193,12 @@ export class Game {
         driving: !!pl.driving,
       },
     });
+  }
+
+  /** Live numbers for tools and the F3 panel's mod equivalent. */
+  perfSnapshot(): { fps: number; frame_ms: number; physics_ms: number; entities: number; bodies: number; npcs: number; particles: number; debris: number } {
+    const avg = this.frameTimes.length ? this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length : 0;
+    return { fps: Math.round(this.smoothFps), frame_ms: Number(avg.toFixed(1)), physics_ms: Number(this.physicsMs.toFixed(1)), entities: this.entities.registry.size, bodies: this.physics.bodyCount, npcs: this.npcs.length, particles: this.fx.activeParticles, debris: this.debris.count };
   }
 
   private refreshDebug(dt: number): void {

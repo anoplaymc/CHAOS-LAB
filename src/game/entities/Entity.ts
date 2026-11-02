@@ -56,6 +56,8 @@ export class Entity implements Registered {
   frozen = false;
   held = false;
   dead = false;
+  /** Ignores all damage. Set through game.sandbox and never saved. */
+  invulnerable = false;
   /** Multiplier from low-gravity zones, gravity tool, etc. */
   gravityScale = 1;
   /** Set by per-instance overrides such as map fixtures. */

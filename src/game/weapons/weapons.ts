@@ -33,6 +33,7 @@ abstract class Weapon extends Tool {
     this.cooldown.tick(dt);
     this.energy.tick(dt);
   }
+  override refillEnergy(): void { this.energy.refill(); }
   override reload(): void {
     if (this.energy.value >= this.energy.max * 0.999) return;
     this.energy.refill();
@@ -151,7 +152,7 @@ export class ImpulseCannon extends Weapon {
     const aim = this.game.aimRay();
     const range = 6 + power * 14;
     const cosCone = Math.cos((30 * Math.PI) / 180);
-    const strength = (500 + power * 3400) * sign;
+    const strength = (500 + power * 3400) * sign * this.game.sandbox.impulseScale;
     let count = 0;
     this.game.physics.overlap(new RAPIER.Ball(range), aim.origin, { x: 0, y: 0, z: 0, w: 1 }, Group.PROP | Group.NPC | Group.VEHICLE | Group.PROJECTILE, (c) => {
       const b = c.parent();

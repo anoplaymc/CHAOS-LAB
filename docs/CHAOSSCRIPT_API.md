@@ -2,7 +2,7 @@
 
 <!-- Generated from src/modding/api. Do not edit: run `npm run mod -- docs`. -->
 
-API version 1.0. Every function below exists, and a test runs every example against a real game. New to modding? Start with [MODDING_GUIDE.md](MODDING_GUIDE.md).
+API version 1.1. Every function below exists, and a test runs every example against a real game. New to modding? Start with [MODDING_GUIDE.md](MODDING_GUIDE.md).
 
 ## Conventions
 
@@ -27,13 +27,14 @@ Declared in `mod.json`. Functions without a permission are always allowed.
 | `ui` | Show messages, panels, menus and buttons. |
 | `storage` | Save data between sessions (up to 256 KB). |
 | `rules` | Change session rules such as gravity and damage. |
+| `sandbox` | Override the player's abilities, time, lighting, weapons, NPC behaviour and debug views. All of it is undone when the mod stops. |
 
 ## Contents
 
 - [log](#log): info, warn, error
-- [mod](#mod): id, version, full_id, has_permission, is_loaded, list
+- [mod](#mod): id, version, full_id, has_permission, is_loaded, list, logs, status, api
 - [register](#register): material, prop, npc, tool, weapon, vehicle, map, mode, sound, effect
-- [game](#game): time, in_session, map, current_mode, language, gravity, set_gravity, set_damage, set_aggression, explode, shockwave, noise, items, materials
+- [game](#game): time, in_session, map, current_mode, language, gravity, set_gravity, set_damage, set_aggression, explode, shockwave, noise, items, materials, item_info
 - [entity](#entity): spawn, remove, exists, def, kind, position, set_position, set_yaw, velocity, set_velocity, apply_impulse, mass, health, max_health, set_health, damage, set_gravity_scale, set_damping, set_anchored, is_anchored, freeze, scale, set_scale, set_tint, material, set_material, find_near, list, set_data, get_data, set_signal
 - [npc](#npc): is_npc, state, order, faction, is_enemy, enemies_in_sight, target, can_see_target, attack, set_territory, set_attack_damage, is_provoked, set_provoked, go_to, follow, guard, patrol, use, tinker, stop, say, stun, alert, scare, all
 - [vehicle](#vehicle): is_vehicle, speed, is_driven, enter, exit
@@ -42,11 +43,14 @@ Declared in `mod.json`. Functions without a permission are always allowed.
 - [vec](#vec): new, add, sub, scale, length, dist, normalize, dot, cross
 - [fx](#fx): burst, puff, beam, ring, flash, explosion, shake
 - [sound](#sound): play, names
-- [ui](#ui): toast, show_panel, hide_panel, open_menu, close_menu, add_button, remove_button
+- [ui](#ui): toast, show_panel, hide_panel, open_menu, close_menu, add_button, remove_button, open_panel, update_panel, close_panel, panel_open
 - [storage](#storage): get, set, delete, keys
 - [events](#events): on, off, emit
 - [timer](#timer): after, every, cancel
 - [mode](#mode): finish, is_mine
+- [sandbox](#sandbox): set_god, set_player_tuning, set_flight, set_rule_gravity, set_rule_damage, set_rule_aggression, set_air_control, set_infinite_energy, refill_energy, set_weapon_tuning, set_unlock_tools, tools, set_time_scale, set_world_frozen, world_frozen, set_blast_scale, set_environment, environment, set_overlay, set_highlight, perf, track_spawn, is_tracked, remember_entity, restore_entity, set_mass, set_invulnerable, is_invulnerable, npc_info, npc_set_ai, npc_set_stance, npc_set_tuning, vehicle_info, vehicle_set_tuning, vehicle_upright, active, revert_all
+- [input](#input): bind, unbind
+- [json](#json): encode, decode
 - [Events](#events), [Model parts](#model-parts), [Standard library](#standard-library)
 
 ## log
@@ -145,6 +149,44 @@ Every installed mod.
 
 ```lua
 assert(type(mod.list()) == "table")
+```
+
+### `mod.logs`
+
+`mod.logs([limit], [level]) -> list of {mod, level, text, time}`
+
+The log of every mod, as shown in the debug console.
+
+Permission: `sandbox`.
+
+- `limit`: Most recent entries to return, up to 200. Default 50.
+- `level`: "info", "warn" or "error". Default all.
+
+```lua
+log.info("hello")
+assert(#mod.logs(5) > 0)
+```
+
+### `mod.status`
+
+`mod.status() -> {phase, errors, timers, handlers, keys, storage_bytes, heap_cells}`
+
+How this mod's script is doing.
+
+```lua
+assert(mod.status().phase ~= nil)
+```
+
+### `mod.api`
+
+`mod.api([word]) -> list of {name, signature, doc, permission}`
+
+The API functions that exist.
+
+- `word`: Only functions whose name or description contains this.
+
+```lua
+assert(#mod.api("sandbox.set_god") == 1)
 ```
 
 ## register
@@ -765,6 +807,17 @@ Every physics material id.
 
 ```lua
 assert(table.contains(game.materials(), "wood"))
+```
+
+### `game.item_info`
+
+`game.item_info(id) -> table, or nil if there is no such item`
+
+Details of one catalog item, for showing to the player.
+
+```lua
+assert(game.item_info("crate_wood").material == "wood")
+assert(game.item_info("nothing") == nil)
 ```
 
 ## entity
@@ -2307,6 +2360,61 @@ Permission: `ui`.
 ui.remove_button(-1)
 ```
 
+### `ui.open_panel`
+
+`ui.open_panel(view, on_event)`
+
+Opens a large panel with sections of toggles, sliders, lists, buttons, text boxes and key choosers, and frees the mouse. It's plain data that the game draws. The world keeps running.
+
+Permission: `ui`. Needs a running session.
+
+- `view`: What to show. See ui.update_panel.
+- `on_event`: on_event(e), with e.type "control", "nav", "reset" or "chip", e.id and e.value.
+
+```lua
+ui.open_panel({ title = "Lab", sections = { { title = "Power", controls = { { type = "toggle", id = "on", label = "On", value = true } } } } }, function(e) log.info(e.type, e.id, e.value) end)
+assert(ui.panel_open())
+ui.close_panel()
+```
+
+### `ui.update_panel`
+
+`ui.update_panel(view)`
+
+Replaces what an open panel shows. Fields being edited keep their place. Limit: 1500 controls.
+
+Permission: `ui`. Needs a running session.
+
+- `view`: title, subtitle, scale, nav (list of {id, label, badge}), active, search ({id, value, placeholder}), chips (list of {id, label}), sections (list of {title, note, controls}), footer (a list of controls), and confirm ({text, yes, no}). A control has a type: text (text, style), toggle, slider (min, max, step, unit), select (options as {value, label}), button (style, disabled), input (placeholder), textarea (rows, readonly, filename), key, or unavailable (reason). Most have id, label, hint and value, and a reset=true adds a reset button.
+
+```lua
+ui.open_panel({ title = "Lab" }, function(e) end)
+ui.update_panel({ title = "Lab 2" })
+ui.close_panel()
+```
+
+### `ui.close_panel`
+
+`ui.close_panel()`
+
+Closes this mod's panel.
+
+Permission: `ui`. Needs a running session.
+
+```lua
+ui.close_panel()
+```
+
+### `ui.panel_open`
+
+`ui.panel_open() -> boolean`
+
+True while this mod's panel is on screen. Esc closes it without telling the mod.
+
+```lua
+assert(ui.panel_open() == false)
+```
+
 ## storage
 
 Data kept between sessions and reloads. Values are text, numbers, booleans and tables of those. The limit is 256 KB per mod.
@@ -2481,6 +2589,637 @@ True if the running mode was registered by this mod.
 
 ```lua
 assert(type(mode.is_mine()) == "boolean")
+```
+
+## sandbox
+
+Temporary overrides for sandbox and test tools. Every one of them is undone when the mod stops, is disabled or faults, and when the session ends, so a mod applies them again from `session_start`. Passing nil to a setter restores the original value.
+
+### `sandbox.set_god`
+
+`sandbox.set_god(on)`
+
+God mode: no damage, full health, and blasts don't throw the player.
+
+Permission: `sandbox`. Needs a running session.
+
+```lua
+sandbox.set_god(true)
+player.damage(50)
+assert(player.health() == player.max_health())
+sandbox.set_god(false)
+```
+
+### `sandbox.set_player_tuning`
+
+`sandbox.set_player_tuning(tuning)`
+
+Scales how the player moves.
+
+Permission: `sandbox`. Needs a running session.
+
+- `tuning`: Fields to change. A field set to -1 goes back to normal, and a field left out stays as it is.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `speed` | number, -1 to 10 |  | Walking speed multiplier, at least 0.1. |
+| `jump` | number, -1 to 25 |  | Jump height multiplier. |
+| `gravity` | number, -1 to 5 |  | Multiplier on the gravity the player feels. |
+| `fly_speed` | number, -1 to 10 |  | Flight speed multiplier, at least 0.1. |
+
+```lua
+sandbox.set_player_tuning{ speed = 2, jump = 4 }
+sandbox.set_player_tuning{ speed = -1, jump = -1 }
+```
+
+### `sandbox.set_flight`
+
+`sandbox.set_flight(on, [noclip]) -> true if it changed`
+
+Turns flight on or off, whatever the game mode allows. It can't change while driving or dead.
+
+Permission: `sandbox`. Needs a running session.
+
+- `noclip`: true passes through everything. false, the default, stops at walls.
+
+```lua
+assert(sandbox.set_flight(true, false))
+assert(player.is_flying())
+sandbox.set_flight(false)
+```
+
+### `sandbox.set_rule_gravity`
+
+`sandbox.set_rule_gravity([g])`
+
+Changes world gravity, keeping the session's real value for saved games.
+
+Permission: `sandbox`. Needs a running session.
+
+- `g`: -20 to 40. nil restores it.
+
+```lua
+sandbox.set_rule_gravity(3)
+assert(game.gravity() == 3)
+sandbox.set_rule_gravity(nil)
+assert(game.gravity() == 9.81)
+```
+
+### `sandbox.set_rule_damage`
+
+`sandbox.set_rule_damage([enabled])`
+
+Turns player damage on or off, keeping the session's real value for saved games.
+
+Permission: `sandbox`. Needs a running session.
+
+- `enabled`: nil restores it.
+
+```lua
+sandbox.set_rule_damage(false)
+sandbox.set_rule_damage(nil)
+```
+
+### `sandbox.set_rule_aggression`
+
+`sandbox.set_rule_aggression([level])`
+
+How readily NPCs attack, keeping the session's real value for saved games.
+
+Permission: `sandbox`. Needs a running session.
+
+- `level`: "passive", "normal", "high", or nil to restore it.
+
+```lua
+sandbox.set_rule_aggression("passive")
+sandbox.set_rule_aggression(nil)
+```
+
+### `sandbox.set_air_control`
+
+`sandbox.set_air_control([amount])`
+
+How much the player can steer in the air.
+
+Permission: `sandbox`. Needs a running session.
+
+- `amount`: 0 to 5. nil restores it.
+
+```lua
+sandbox.set_air_control(2)
+sandbox.set_air_control(nil)
+```
+
+### `sandbox.set_infinite_energy`
+
+`sandbox.set_infinite_energy(on)`
+
+Keeps every energy bar full.
+
+Permission: `sandbox`. Needs a running session.
+
+```lua
+sandbox.set_infinite_energy(true)
+sandbox.set_infinite_energy(false)
+```
+
+### `sandbox.refill_energy`
+
+`sandbox.refill_energy()`
+
+Fills every tool's energy bar once.
+
+Permission: `sandbox`. Needs a running session.
+
+```lua
+sandbox.refill_energy()
+```
+
+### `sandbox.set_weapon_tuning`
+
+`sandbox.set_weapon_tuning(tuning)`
+
+Scales the player's weapons.
+
+Permission: `sandbox`. Needs a running session.
+
+- `tuning`: Fields to change. A field left out stays as it is, and 1 is normal.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `damage` | number, 0 to 100 |  | Multiplier on damage the player deals with weapons. |
+| `impulse` | number, 0 to 20 |  | Multiplier on how hard the player's shots push. |
+| `fire_rate` | number, 0.1 to 10 |  | How quickly weapons cool down and recharge. |
+
+```lua
+sandbox.set_weapon_tuning{ damage = 3, fire_rate = 2 }
+sandbox.set_weapon_tuning{ damage = 1, fire_rate = 1 }
+```
+
+### `sandbox.set_unlock_tools`
+
+`sandbox.set_unlock_tools(on)`
+
+Lets the player use every tool in a mode that limits them.
+
+Permission: `sandbox`. Needs a running session.
+
+```lua
+sandbox.set_unlock_tools(true)
+sandbox.set_unlock_tools(false)
+```
+
+### `sandbox.tools`
+
+`sandbox.tools() -> list of {id, kind, slot, allowed, name}`
+
+Every tool in the hotbar, in order. Reading it needs no permission.
+
+Needs a running session.
+
+```lua
+assert(#sandbox.tools() >= 12)
+```
+
+### `sandbox.set_time_scale`
+
+`sandbox.set_time_scale([scale])`
+
+Slows or speeds up the simulation, player included. Frames still run at most 5 steps, so it can't run away.
+
+Permission: `sandbox`. Needs a running session.
+
+- `scale`: 0.1 to 3. nil restores normal speed.
+
+```lua
+sandbox.set_time_scale(0.5)
+sandbox.set_time_scale(nil)
+```
+
+### `sandbox.set_world_frozen`
+
+`sandbox.set_world_frozen(on)`
+
+Holds every physics object and NPC still, keeping its motion for when it ends. The player can still move. Debris and shots already fired carry on.
+
+Permission: `sandbox`. Needs a running session.
+
+```lua
+sandbox.set_world_frozen(true)
+assert(sandbox.world_frozen())
+sandbox.set_world_frozen(false)
+```
+
+### `sandbox.world_frozen`
+
+`sandbox.world_frozen() -> boolean`
+
+True while the world is held still.
+
+```lua
+assert(sandbox.world_frozen() == false)
+```
+
+### `sandbox.set_blast_scale`
+
+`sandbox.set_blast_scale([scale])`
+
+Multiplies the push of every explosion and shockwave.
+
+Permission: `sandbox`. Needs a running session.
+
+- `scale`: 0 to 10. nil restores it.
+
+```lua
+sandbox.set_blast_scale(2)
+sandbox.set_blast_scale(nil)
+```
+
+### `sandbox.set_environment`
+
+`sandbox.set_environment([changes])`
+
+Changes the sky, sun, ambient light, fog and time of day.
+
+Permission: `sandbox`. Needs a running session.
+
+- `changes`: Fields to change. A field left out stays as it is. nil puts the map's light back.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `sun` | number, 0 to 5 |  | Sunlight multiplier. |
+| `ambient` | number, 0 to 5 |  | Ambient light multiplier. |
+| `fog` | number, 0 to 30 |  | Fog density multiplier. |
+| `preset` | "map" \| "day" \| "dusk" \| "night" \| "cloud" |  | Sky and lighting to use. "map" is the map's own. |
+| `hour` | number, -1 to 24 |  | Time of day, which moves the sun and blends the sky. Use -1 to go back to the map's fixed light. |
+
+```lua
+sandbox.set_environment{ hour = 21, fog = 3 }
+assert(sandbox.environment().hour == 21)
+sandbox.set_environment(nil)
+```
+
+### `sandbox.environment`
+
+`sandbox.environment() -> {sun, ambient, fog, preset, hour}`
+
+The current changes to the light. preset and hour are nil when unchanged.
+
+```lua
+assert(sandbox.environment().sun == 1)
+```
+
+### `sandbox.set_overlay`
+
+`sandbox.set_overlay(name, on)`
+
+A debug view drawn in the world: physics colliders, NPC sight and hearing rings, NPC movement, NPC state labels, or a box around highlighted entities.
+
+Permission: `sandbox`. Needs a running session.
+
+- `name`: "colliders", "npc_radius", "npc_direction", "npc_labels", "highlight".
+
+```lua
+sandbox.set_overlay("colliders", true)
+sandbox.set_overlay("colliders", false)
+```
+
+### `sandbox.set_highlight`
+
+`sandbox.set_highlight(ids)`
+
+Which entities the "highlight" overlay marks.
+
+Permission: `sandbox`. Needs a running session.
+
+- `ids`: A list of entity ids. An empty list clears it.
+
+```lua
+local id = entity.spawn("crate_wood", {x=0, y=30, z=0})
+sandbox.set_highlight({id})
+sandbox.set_overlay("highlight", true)
+sandbox.set_overlay("highlight", false)
+sandbox.set_highlight({})
+entity.remove(id)
+```
+
+### `sandbox.perf`
+
+`sandbox.perf() -> {fps, frame_ms, physics_ms, entities, bodies, npcs, particles, debris}`
+
+Live performance numbers, as on the F3 panel.
+
+Needs a running session.
+
+```lua
+assert(sandbox.perf().bodies > 0)
+```
+
+### `sandbox.track_spawn`
+
+`sandbox.track_spawn(id)`
+
+Marks an entity as this mod's, so it's removed when the mod stops.
+
+Permission: `sandbox`.
+
+```lua
+local id = entity.spawn("crate_wood", {x=0, y=30, z=0})
+sandbox.track_spawn(id)
+assert(sandbox.is_tracked(id))
+entity.remove(id)
+```
+
+### `sandbox.is_tracked`
+
+`sandbox.is_tracked(id) -> boolean`
+
+True if a mod marked this entity with sandbox.track_spawn.
+
+```lua
+assert(sandbox.is_tracked(-1) == false)
+```
+
+### `sandbox.remember_entity`
+
+`sandbox.remember_entity(id)`
+
+Remembers its scale, material, paint, anchoring, gravity scale and damping, to restore with sandbox.restore_entity or when the mod stops. Only the first call counts until it's restored.
+
+Permission: `sandbox`.
+
+```lua
+local id = entity.spawn("crate_wood", {x=0, y=30, z=0})
+sandbox.remember_entity(id)
+entity.set_scale(id, 2)
+sandbox.restore_entity(id)
+assert(entity.scale(id) == 1)
+entity.remove(id)
+```
+
+### `sandbox.restore_entity`
+
+`sandbox.restore_entity(id) -> true if there was something to restore`
+
+Puts back what sandbox.remember_entity and sandbox.set_mass recorded.
+
+Permission: `sandbox`.
+
+```lua
+assert(sandbox.restore_entity(-1) == false)
+```
+
+### `sandbox.set_mass`
+
+`sandbox.set_mass(id, kg)`
+
+Changes its mass. sandbox.restore_entity puts it back.
+
+Permission: `sandbox`.
+
+- `kg`: 0.1 to 20000.
+
+```lua
+local id = entity.spawn("crate_wood", {x=0, y=30, z=0})
+sandbox.set_mass(id, 500)
+assert(math.abs(entity.mass(id) - 500) < 1)
+sandbox.restore_entity(id)
+entity.remove(id)
+```
+
+### `sandbox.set_invulnerable`
+
+`sandbox.set_invulnerable(id, on)`
+
+Makes one entity ignore all damage.
+
+Permission: `sandbox`.
+
+```lua
+local id = entity.spawn("crate_wood", {x=0, y=30, z=0})
+sandbox.set_invulnerable(id, true)
+entity.damage(id, 5)
+assert(entity.health(id) == 60)
+sandbox.set_invulnerable(id, false)
+entity.remove(id)
+```
+
+### `sandbox.is_invulnerable`
+
+`sandbox.is_invulnerable(id) -> boolean`
+
+True if it ignores damage.
+
+```lua
+local id = entity.spawn("crate_wood", {x=0, y=30, z=0})
+assert(not sandbox.is_invulnerable(id))
+entity.remove(id)
+```
+
+### `sandbox.npc_info`
+
+`sandbox.npc_info(id) -> table, or nil if not an NPC`
+
+What an NPC is like and what it's doing: type numbers, stance, faction, state, order, target, and its current multipliers.
+
+```lua
+local id = entity.spawn("npc_guard", {x=0, y=30, z=0})
+assert(sandbox.npc_info(id).faction == "lab")
+entity.remove(id)
+```
+
+### `sandbox.npc_set_ai`
+
+`sandbox.npc_set_ai(id, on)`
+
+Stops or resumes an NPC's thinking. It can still be pushed around.
+
+Permission: `sandbox`.
+
+```lua
+local id = entity.spawn("npc_guard", {x=0, y=30, z=0})
+sandbox.npc_set_ai(id, false)
+assert(sandbox.npc_info(id).ai == false)
+sandbox.npc_set_ai(id, true)
+entity.remove(id)
+```
+
+### `sandbox.npc_set_stance`
+
+`sandbox.npc_set_stance(id, [stance])`
+
+Changes which side one NPC is on.
+
+Permission: `sandbox`.
+
+- `stance`: "friendly" joins the lab, "neutral" fights nobody, "hostile" hunts the player and joins the rogues. nil is its type's own. An NPC without an attack can't fight whatever its stance.
+
+```lua
+local id = entity.spawn("npc_guard", {x=0, y=30, z=0})
+sandbox.npc_set_stance(id, "hostile")
+assert(sandbox.npc_info(id).hostile_to_player)
+sandbox.npc_set_stance(id, nil)
+entity.remove(id)
+```
+
+### `sandbox.npc_set_tuning`
+
+`sandbox.npc_set_tuning(id, tuning)`
+
+Scales one NPC's speed and detection ranges.
+
+Permission: `sandbox`.
+
+- `tuning`: Fields to change. A field left out stays as it is, and 1 is normal.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `speed` | number, 0 to 5 |  | Movement speed multiplier. |
+| `sight` | number, 0 to 10 |  | Sight range multiplier. |
+| `hearing` | number, 0 to 10 |  | Hearing range multiplier. |
+
+```lua
+local id = entity.spawn("npc_guard", {x=0, y=30, z=0})
+sandbox.npc_set_tuning(id, { speed = 2, sight = 3 })
+assert(sandbox.npc_info(id).speed_scale == 2)
+entity.remove(id)
+```
+
+### `sandbox.vehicle_info`
+
+`sandbox.vehicle_info(id) -> table, or nil if not a vehicle`
+
+A vehicle's numbers and its current multipliers.
+
+```lua
+local id = entity.spawn("buggy", {x=0, y=30, z=0})
+assert(sandbox.vehicle_info(id).top_speed > 0)
+entity.remove(id)
+```
+
+### `sandbox.vehicle_set_tuning`
+
+`sandbox.vehicle_set_tuning(id, tuning)`
+
+Scales one vehicle's engine, top speed and grip.
+
+Permission: `sandbox`.
+
+- `tuning`: Fields to change. A field left out stays as it is, and 1 is normal.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `engine` | number, 0.1 to 10 |  | Engine force multiplier, which is its acceleration. |
+| `top_speed` | number, 0.1 to 10 |  | Top speed multiplier. |
+| `grip` | number, 0.1 to 10 |  | Tyre grip multiplier. |
+
+```lua
+local id = entity.spawn("buggy", {x=0, y=30, z=0})
+sandbox.vehicle_set_tuning(id, { engine = 2 })
+assert(sandbox.vehicle_info(id).engine_scale == 2)
+entity.remove(id)
+```
+
+### `sandbox.vehicle_upright`
+
+`sandbox.vehicle_upright(id)`
+
+Lifts a vehicle and sets it back on its wheels, as R does when driving.
+
+Permission: `sandbox`.
+
+```lua
+local id = entity.spawn("buggy", {x=0, y=30, z=0})
+sandbox.vehicle_upright(id)
+entity.remove(id)
+```
+
+### `sandbox.active`
+
+`sandbox.active() -> list of strings`
+
+Names of the overrides this mod has in place.
+
+```lua
+sandbox.set_god(true)
+assert(table.contains(sandbox.active(), "player:god"))
+sandbox.set_god(false)
+```
+
+### `sandbox.revert_all`
+
+`sandbox.revert_all([remove_spawned])`
+
+Undoes every override this mod has in place, as if it had stopped.
+
+Permission: `sandbox`.
+
+- `remove_spawned`: Also removes what sandbox.track_spawn marked. Default false.
+
+```lua
+sandbox.set_god(true)
+sandbox.revert_all()
+assert(#sandbox.active() == 0)
+```
+
+## input
+
+Keys a mod can bind. The game's own keys and the browser's F5, F11 and F12 can't be taken.
+
+### `input.bind`
+
+`input.bind(code, f) -> binding id`
+
+Runs f when the key is pressed during play. An unknown or reserved key is an error. Ends when the mod unloads.
+
+Permission: `ui`.
+
+- `code`: A key code such as "F6" or "KeyO".
+
+```lua
+local b = input.bind("F9", function() log.info("pressed") end)
+assert(input.unbind(b))
+```
+
+### `input.unbind`
+
+`input.unbind(id) -> true if it existed`
+
+Removes a binding.
+
+Permission: `ui`.
+
+```lua
+assert(input.unbind(-1) == false)
+```
+
+## json
+
+Convert plain data to and from JSON text.
+
+### `json.encode`
+
+`json.encode(value) -> text`
+
+Turns plain data into JSON text.
+
+- `value`: Text, numbers, booleans and tables of those.
+
+```lua
+assert(json.encode({a=1}) == "{\"a\":1}")
+```
+
+### `json.decode`
+
+`json.decode(text) -> value, or nil if it isn't valid JSON`
+
+Reads JSON text into plain data.
+
+- `text`: At most 256 KB.
+
+```lua
+assert(json.decode("{\"a\":1}").a == 1)
+assert(json.decode("not json") == nil)
 ```
 
 ## Events

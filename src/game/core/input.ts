@@ -11,6 +11,11 @@ const BINDINGS: Record<string, Action> = {
   BracketLeft: 'partPrev', BracketRight: 'partNext', F1: 'controls', KeyM: 'modMenu', Backquote: 'console',
 };
 
+/** Keys a mod can't bind: the game's own, the hotbar's, and ones the browser or the debug tools need. */
+export function reservedKey(code: string): boolean {
+  return code in BINDINGS || /^Digit\d$/.test(code) || ['Minus', 'Equal', 'Escape', 'Tab', 'Enter', 'F5', 'F11', 'F12'].includes(code);
+}
+
 /** Keys whose browser default would interrupt play. Ctrl+W cannot be blocked: see the leave-page guard in App. */
 const SWALLOW = new Set(['Space', 'Tab', 'F1', 'F3', 'F4', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyR']);
 
@@ -43,6 +48,8 @@ export class Input {
   onLockChange: ((locked: boolean) => void) | null = null;
   onLockRefused: (() => void) | null = null;
   onGlobalAction: ((a: Action) => boolean) | null = null;
+  /** A key a mod has bound. Returns true when it was used. */
+  onModKey: ((code: string) => boolean) | null = null;
   private target: HTMLElement | null = null;
 
   attach(target: HTMLElement): void {
@@ -112,6 +119,11 @@ export class Input {
     if (e.code === 'Escape') {
       // Acted on at keyup: Firefox ends pointer lock on the Esc keyup, which would undo a lock taken at keydown.
       this.escapeArmed = !isTyping(e.target) || (e.target as HTMLInputElement).value === '';
+      return;
+    }
+    // Function keys type nothing, so a menu with a text box focused can still be closed with its own key.
+    if (!e.repeat && (!isTyping(e.target) || /^F\d+$/.test(e.code)) && this.onModKey?.(e.code)) {
+      e.preventDefault();
       return;
     }
     if (isTyping(e.target)) return;

@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync, cpSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { catalog } from '../data/items';
 import { Game } from '../game/core/Game';
@@ -11,6 +12,7 @@ import { typeLabel } from './fields';
 import { signature } from './ModHost';
 import { bundleToText, examineBundle, type ModBundle } from './ModManager';
 import { analyzeMod, type QualityReport } from './quality';
+import { writeZip, type ZipInput } from './zipWrite';
 
 const ROOT = process.cwd();
 const MODS = join(ROOT, 'mods');
@@ -358,6 +360,29 @@ function pack(dir: string): number {
   return 0;
 }
 
+/** A ZIP for Import Mod: one folder named after the mod, so that unpacking it by hand also gives the right shape. */
+function zipCommand(dir: string, out: string | undefined): number {
+  const b = readFolder(dir);
+  const x = examineBundle(b);
+  for (const e of x.errors) console.log(`  error: ${e}`);
+  if (!x.manifest) return 1;
+  if (x.errors.length) return 1;
+  const m = x.manifest;
+  const keep = (rel: string) => !rel.split('/').some((p) => p.startsWith('.')) && (rel === 'mod.json' || /\.(chaos|md|png|jpe?g|webp)$/i.test(rel) || /^(LICENSE|NOTICE)(\.\w+)?$/.test(rel));
+  const files = walk(dir).map((p) => relative(dir, p).split(sep).join('/')).filter(keep).sort();
+  const entries: ZipInput[] = files.map((rel) => ({ path: `${m.id}/${rel}`, data: new Uint8Array(readFileSync(join(dir, rel))) }));
+  const zip = writeZip(entries);
+  const folder = resolve(out ?? join(ROOT, 'dist-mods'));
+  mkdirSync(folder, { recursive: true });
+  const name = `${m.id}-${m.version}.zip`;
+  const path = join(folder, name);
+  writeFileSync(path, zip);
+  const hash = createHash('sha256').update(zip).digest('hex');
+  writeFileSync(`${path}.sha256`, `${hash}  ${name}\n`);
+  console.log(`Wrote ${relative(ROOT, path)}: ${files.length} files, ${zip.length} bytes.\nSHA-256 ${hash}`);
+  return 0;
+}
+
 function list(): number {
   const show = (root: string, label: string) => {
     if (!existsSync(root)) return;
@@ -387,12 +412,13 @@ const USAGE = `CHAOS LAB mod toolkit
   npm run mod -- list                  List mods and reference examples
   npm run mod -- api [word]            Search the API. An exact name, such as entity.spawn, prints its fields and example
   npm run mod -- pack <mod>            Write dist-mods/<id>.chaosmod.json, installable from the game
+  npm run mod -- zip <mod> [folder]    Create <id>-<version>.zip and its SHA-256, for Import Mod in the Mods screen
   npm run mod -- docs [--check]        Regenerate docs/CHAOSSCRIPT_API.md, or fail if it's out of date
 
   <mod> is a name in mods/ (my_mod) or a path (mods/examples/npc_patrol). Exit code 0 means success.
 `;
 
-export const COMMANDS = ['new', 'validate', 'test', 'info', 'list', 'api', 'pack', 'docs'];
+export const COMMANDS = ['new', 'validate', 'test', 'info', 'list', 'api', 'pack', 'zip', 'docs'];
 
 export async function main(args: string[]): Promise<number> {
   const [cmd, a, b] = args;
@@ -405,6 +431,7 @@ export async function main(args: string[]): Promise<number> {
       case 'list': return list();
       case 'api': return apiSearch(a);
       case 'pack': return pack(target(a));
+      case 'zip': return zipCommand(target(a), b);
       case 'docs': {
         const path = join(ROOT, 'docs', 'CHAOSSCRIPT_API.md');
         if (a === '--check') {

@@ -62,6 +62,12 @@ export class NpcComponent implements Component {
   private ordered: NpcComponent | null = null;
   /** Replaces the type's attack damage for this one NPC. */
   attackDamage: number | null = null;
+  /** Sandbox overrides for this one NPC. Types share a profile, so these never touch it. Not saved. */
+  aiEnabled = true;
+  stance: 'friendly' | 'neutral' | 'hostile' | null = null;
+  speedScale = 1;
+  sightScale = 1;
+  hearingScale = 1;
   private hookTimer = Math.random() * 0.25;
   private hookStarted = false;
   private scareTimer = 0;
@@ -127,15 +133,31 @@ export class NpcComponent implements Component {
   /** How a nearby explosion is handled. Types that say nothing just hear the noise, as before. */
   reactToExplosion(p: V3, radius: number): void {
     const reaction: NpcReaction | undefined = this.profile.onExplosion;
-    if (!reaction || !this.alive || dist(p, this.position) > Math.max(radius * 5, this.profile.hearing)) return;
+    if (!reaction || !this.alive || dist(p, this.position) > Math.max(radius * 5, this.hearingRange)) return;
     if (reaction === 'flee') this.scare(p);
     else if (reaction === 'ignore') this.noiseAt = null;
   }
 
   /** Fixture NPCs can be pinned to a map patrol route. */
   get isHostileToPlayer(): boolean {
+    if (this.stance) return this.stance === 'hostile';
     const h = this.profile.hostility;
     return h === 'always' || (h === 'provoked' && this.provoked);
+  }
+
+  /** Its side, counting a stance it was given. */
+  get faction(): NpcProfile['faction'] {
+    if (this.stance === 'friendly') return 'lab';
+    if (this.stance === 'hostile') return 'rogue';
+    return this.stance === 'neutral' ? 'neutral' : this.profile.faction;
+  }
+
+  get sightRange(): number {
+    return this.profile.sight * this.sightScale;
+  }
+
+  get hearingRange(): number {
+    return this.profile.hearing * this.hearingScale;
   }
 
   get state(): NpcState {
@@ -221,14 +243,14 @@ export class NpcComponent implements Component {
   }
 
   hearNoise(p: V3, radius: number): void {
-    if (dist(p, this.position) <= Math.min(radius, this.profile.hearing) && this.mayGoTo(p)) this.noiseAt = { ...p };
+    if (dist(p, this.position) <= Math.min(radius, this.hearingRange) && this.mayGoTo(p)) this.noiseAt = { ...p };
   }
 
   // ── Perception ──
   private validPlayerTarget(): boolean {
     const pl = this.game.player;
     if (pl.dead || pl.flying || !pl.body) return false;
-    return this.game.rules.aggression !== 'passive' || this.provoked;
+    return this.game.rules.aggression !== 'passive' || this.provoked || this.stance === 'hostile';
   }
 
   private selectTarget(): void {
@@ -236,7 +258,7 @@ export class NpcComponent implements Component {
     const prof = this.profile;
     let best: Target | null = null;
     const sightK = this.game.rules.aggression === 'high' ? 1.5 : 1;
-    let bestD = prof.sight * sightK;
+    let bestD = this.sightRange * sightK;
     const ordered = this.ordered;
     if (ordered && (!ordered.alive || ordered.e.dead)) this.ordered = null;
     if (this.ordered && prof.attack !== 'none' && this.withinLeash(this.ordered.position)) {
@@ -249,11 +271,10 @@ export class NpcComponent implements Component {
         const d = dist(me, this.game.player.position);
         if (d < bestD) { bestD = d; best = { kind: 'player' }; }
       }
-      if (prof.faction !== 'neutral') {
+      if (this.faction !== 'neutral') {
         for (const other of this.game.npcs) {
           if (other === this || !other.alive) continue;
-          const enemy = (prof.faction === 'rogue' && other.profile.faction === 'lab') || (prof.faction === 'lab' && other.profile.faction === 'rogue');
-          if (!enemy || !this.withinLeash(other.position)) continue;
+          if (!this.isEnemy(other) || !this.withinLeash(other.position)) continue;
           const d = dist(me, other.position);
           if (d < bestD) { bestD = d; best = { kind: 'npc', npc: other }; }
         }
@@ -307,15 +328,15 @@ export class NpcComponent implements Component {
   }
 
   isEnemy(other: NpcComponent): boolean {
-    const a = this.profile.faction;
-    const b = other.profile.faction;
+    const a = this.faction;
+    const b = other.faction;
     return (a === 'rogue' && b === 'lab') || (a === 'lab' && b === 'rogue');
   }
 
   /** Living enemies within sight range with a clear line, nearest first. */
   enemiesInSight(limit = 16): Entity[] {
     const me = this.position;
-    const found = this.game.npcs.filter((n) => n !== this && n.alive && !n.e.dead && this.isEnemy(n)).map((n) => ({ n, d: dist(me, n.position) })).filter((x) => x.d <= this.profile.sight).sort((a, b) => a.d - b.d).slice(0, limit);
+    const found = this.game.npcs.filter((n) => n !== this && n.alive && !n.e.dead && this.isEnemy(n)).map((n) => ({ n, d: dist(me, n.position) })).filter((x) => x.d <= this.sightRange).sort((a, b) => a.d - b.d).slice(0, limit);
     const out: Entity[] = [];
     for (const { n, d } of found) {
       const from = { x: me.x, y: me.y + 0.5, z: me.z };
@@ -359,7 +380,7 @@ export class NpcComponent implements Component {
     const me = this.position;
     const pl = this.game.player;
     const pd = dist(me, pl.position);
-    if (pl.speed > 6.5 && pd < this.profile.hearing) {
+    if (pl.speed > 6.5 && pd < this.hearingRange) {
       this.threatDist = pd;
       this.threat = pl.position;
     }
@@ -381,6 +402,16 @@ export class NpcComponent implements Component {
     if (this.brain.state === 'dead') {
       this.deadTimer -= dt;
       if (this.deadTimer <= 0 && !this.game.rules.keepCorpses) this.game.entities.remove(this.e);
+      return;
+    }
+    if (!this.aiEnabled) {
+      // Physics still applies: it can be pushed and can fall, but it doesn't think or walk.
+      this.target = null;
+      this.targetVisible = false;
+      if (b.isDynamic()) {
+        const v = b.linvel();
+        b.setLinvel({ x: v.x * 0.8, y: v.y, z: v.z * 0.8 }, true);
+      }
       return;
     }
     this.runHooks(dt);
@@ -653,7 +684,8 @@ export class NpcComponent implements Component {
 
   private steer(dt: number, state: NpcState, me: V3): void {
     const b = this.e.body!;
-    const { goal, speed, useNav } = this.goalFor(state, me);
+    const { goal, speed: baseSpeed, useNav } = this.goalFor(state, me);
+    const speed = baseSpeed * this.speedScale;
     let dirX = 0;
     let dirZ = 0;
     if (goal && speed > 0) {

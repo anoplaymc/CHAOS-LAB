@@ -47,6 +47,17 @@ export interface ModRecord {
   overridesBuiltin: boolean;
 }
 
+export interface ImportPreview {
+  manifest: Manifest | null;
+  errors: string[];
+  warnings: string[];
+  /** The mod already known by this id, which installing would take the place of. */
+  replaces: { name: string; version: string; bundled: boolean } | null;
+  dependencies: { id: string; version: string; optional: boolean; status: 'ok' | 'missing' | 'wrong_version' | 'disabled' }[];
+  /** Enabled mods that can't run alongside it. */
+  conflicts: string[];
+}
+
 export interface LogEntry { n: number; time: number; mod: string; level: LogLevel; text: string; file?: string; line?: number }
 export interface ModPanel { key: string; title?: Loc; lines: Loc[] }
 export interface ModMenu { owner: string; title: Loc; text?: Loc; buttons: { label: Loc; close: boolean; run: () => void }[] }
@@ -155,7 +166,8 @@ export class ModManager {
       this.sessionActive = false;
       for (const h of this.order) h.sessionEnded();
       this.console?.sessionEnded();
-      game.ui.set({ modPanels: [], modMenu: null });
+      game.sandbox.sessionEnded();
+      game.ui.set({ modPanels: [], modMenu: null, modForm: null });
     });
     ev.on('entitySpawned', (e) => { if (this.sessionActive) this.broadcast('entity_spawned', () => ({ id: e.id, def: e.def.id })); });
     ev.on('entityRemoved', (e) => { if (this.sessionActive) this.broadcast('entity_removed', () => ({ id: e.id, def: e.def.id })); });
@@ -611,14 +623,34 @@ export class ModManager {
     return this.installBundle(bundle);
   }
 
-  async installBundle(input: ModBundle): Promise<{ record?: ModRecord; errors: string[]; warnings: string[] }> {
+  async installBundle(input: ModBundle, opts: { followManifest?: boolean } = {}): Promise<{ record?: ModRecord; errors: string[]; warnings: string[] }> {
     const bundle: ModBundle = { ...input, origin: 'local' };
     const x = examineBundle(bundle);
     if (x.errors.length || !x.manifest) return { errors: x.errors, warnings: x.warnings };
-    await this.game.saves.db.put('mods', x.manifest.id, { enabled: this.enabledPref.get(x.manifest.id) ?? true, bundle });
-    if (!this.enabledPref.has(x.manifest.id)) this.enabledPref.set(x.manifest.id, true);
+    const enabled = this.enabledPref.get(x.manifest.id) ?? (opts.followManifest ? x.manifest.enabled_by_default : true);
+    await this.game.saves.db.put('mods', x.manifest.id, { enabled, bundle });
+    if (!this.enabledPref.has(x.manifest.id)) this.enabledPref.set(x.manifest.id, enabled);
     const record = this.swap(x.manifest.id, bundle);
     return { record, errors: [], warnings: x.warnings };
+  }
+
+  /** Everything to know about installing a bundle, before anything is changed. */
+  previewImport(input: ModBundle): ImportPreview {
+    const x = examineBundle({ ...input, origin: 'local' });
+    const m = x.manifest;
+    if (!m) return { manifest: null, errors: x.errors, warnings: x.warnings, replaces: null, dependencies: [], conflicts: [] };
+    const old = this.records.get(m.id);
+    const replaces = old ? { name: old.manifest?.name ?? old.id, version: old.manifest?.version ?? '?', bundled: old.origin !== 'local' || old.overridesBuiltin } : null;
+    const dependencies = m.dependencies.map((d): ImportPreview['dependencies'][number] => {
+      const dep = this.records.get(d.id);
+      let status: ImportPreview['dependencies'][number]['status'] = 'ok';
+      if (!dep?.manifest) status = 'missing';
+      else if (!satisfies(dep.manifest.version, d.version)) status = 'wrong_version';
+      else if (!dep.enabled) status = 'disabled';
+      return { id: d.id, version: d.version, optional: d.optional, status };
+    });
+    const conflicts = this.list().filter((r) => r.id !== m.id && r.enabled && (m.conflicts.includes(r.id) || r.manifest?.conflicts.includes(m.id))).map((r) => r.id);
+    return { manifest: m, errors: x.errors, warnings: x.warnings, replaces, dependencies, conflicts };
   }
 
   /** Changes one file of a mod, in a local copy, then reloads it. */
@@ -707,7 +739,7 @@ export class ModManager {
 
   private consoleHost(): ModHost {
     if (this.console) return this.console;
-    const manifest: Manifest = { id: 'console', name: 'Console', description: '', version: '0.0.0', author: '', api_version: '1.0', dependencies: [], conflicts: [], permissions: ['world', 'player', 'effects', 'ui', 'storage', 'rules'], scripts: [], assets: [], hot_reload: true, enabled_by_default: true };
+    const manifest: Manifest = { id: 'console', name: 'Console', description: '', version: '0.0.0', author: '', api_version: '1.0', dependencies: [], conflicts: [], permissions: ['world', 'player', 'effects', 'ui', 'storage', 'rules', 'sandbox'], scripts: [], assets: [], hot_reload: true, enabled_by_default: true };
     this.console = new ModHost(this.game, this, manifest, { origin: 'dev', manifest: '', files: {} }, null);
     this.console.phase = 'running';
     return this.console;
@@ -729,6 +761,13 @@ export class ModManager {
     this.unloadAll();
     this.listeners.clear();
     this.logListeners.clear();
+  }
+
+  /** A key press during play, offered to mods that bound it. Returns true if one used it. */
+  handleKey(code: string): boolean {
+    const ui = this.game.ui.get();
+    if (!this.sessionActive || ui.screen !== 'playing' || ui.paused || ui.modeHud?.result) return false;
+    return this.order.some((h) => h.pressKey(code));
   }
 
   /** Mod Menu entries from every running mod. */

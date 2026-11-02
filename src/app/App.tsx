@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Game, type UiState } from '../game/core/Game';
 import { Hud, QuickMenu } from '../ui/Hud';
 import { CleanupPanel, MainMenu, PauseMenu, ResultScreen } from '../ui/Menus';
+import { ModFormOverlay } from '../ui/ModForm';
 import { DebugConsole, ModMenuOverlay } from '../ui/ModsUi';
 import { SpawnMenu } from '../ui/SpawnMenu';
 
@@ -98,6 +99,7 @@ function Screens({ game }: { game: Game }) {
       {overlay === 'spawn' && <SpawnMenu game={game} />}
       {overlay === 'quick' && <QuickMenu game={game} />}
       {overlay === 'mod' && <ModMenuOverlay game={game} />}
+      {overlay === 'modform' && <ModFormOverlay game={game} />}
       {overlay === 'cleanup' && <div className="modal-backdrop"><CleanupPanel game={game} onBack={() => game.setOverlay(null)} /></div>}
       {paused && <PauseMenu key={sessionId} game={game} />}
       <ResultScreen game={game} />

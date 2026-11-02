@@ -28,6 +28,10 @@ export class VehicleComponent implements Component, DriveTarget {
   private m = new THREE.Matrix4();
   private spin: number[];
   readonly spec: VehicleSpec;
+  /** Per-vehicle sandbox multipliers. The spec is shared by every vehicle of this type. */
+  engineScale = 1;
+  topSpeedScale = 1;
+  gripScale = 1;
 
   constructor(readonly entity: Entity, private game: Game) {
     this.spec = entity.def.vehicle ?? BUGGY_SPEC;
@@ -74,6 +78,11 @@ export class VehicleComponent implements Component, DriveTarget {
       e.root.add(g);
       this.wheels.push(g);
     }
+  }
+
+  setGripScale(k: number): void {
+    this.gripScale = k;
+    for (let i = 0; i < this.spec.wheels.length; i++) this.controller?.setWheelFrictionSlip(i, this.spec.grip * k);
   }
 
   onRemove(): void {
@@ -151,7 +160,9 @@ export class VehicleComponent implements Component, DriveTarget {
     const speedAbs = Math.abs(speed);
     // The chassis' nose is at -Z, while the controller's forward axis is +Z.
     const fwdSpeed = -speed;
-    const { wheels, steer: steerLimit, engine: enginePower, topSpeed } = this.spec;
+    const { wheels, steer: steerLimit } = this.spec;
+    const enginePower = this.spec.engine * this.engineScale;
+    const topSpeed = this.spec.topSpeed * this.topSpeedScale;
     const steerMax = clamp(steerLimit - speedAbs * 0.018, 0.2, steerLimit);
     this.steer = damp(this.steer, steerInput * steerMax, 9, dt);
     const braking = throttle !== 0 && fwdSpeed * throttle < -0.8;

@@ -184,3 +184,73 @@ kbd { font-family: var(--mono); font-size: 0.8em; padding: 1px 5px; border: 1px 
 .log-mod { color: var(--muted); margin-right: 8px; }
 .console-input { background: #0a1013; color: #e8e6dc; border: 0; border-top: 1px solid var(--line); padding: 8px 10px; font: 14px var(--mono); outline: none; }
 .slot.extra { width: 9px; }
+
+/* Mod panels: large, data-driven windows a mod can open. */
+.mf-backdrop { display: block; padding: 0; background: rgba(5, 9, 11, 0.45); overflow: hidden; }
+.mf-window { position: absolute; left: 50%; top: 50%; display: flex; flex-direction: column; background: rgba(11, 17, 20, 0.97); border: 1px solid var(--line); border-top: 3px solid var(--teal); box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55); color: var(--text); overflow: hidden; }
+.mf-header { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.mf-header > div { flex: 0 1 auto; min-width: 0; }
+.mf-header h2 { margin: 0; font-family: var(--cond); font-size: 26px; letter-spacing: 0.12em; color: var(--teal); text-transform: uppercase; line-height: 1.05; }
+.mf-header small { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.mf-search { flex: 1 1 160px; min-width: 100px; }
+.mf-chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 14px; border-bottom: 1px solid var(--line); background: rgba(25, 224, 196, 0.05); max-height: 72px; overflow-y: auto; }
+.mf-chip { background: rgba(25, 224, 196, 0.14); border: 1px solid var(--teal); color: var(--teal); font: 12px var(--mono); padding: 1px 7px; cursor: pointer; }
+.mf-chip:hover { background: rgba(255, 90, 68, 0.2); border-color: var(--coral); color: #ffb4a8; }
+.mf-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 14px; background: rgba(255, 90, 68, 0.14); border-bottom: 1px solid var(--coral); }
+.mf-confirm span { flex: 1; min-width: 200px; }
+.mf-body { flex: 1; display: flex; min-height: 0; }
+.mf-nav { flex: 0 0 176px; overflow-y: auto; border-right: 1px solid var(--line); padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.mf-tab { display: flex; justify-content: space-between; gap: 6px; background: transparent; border: 0; border-left: 3px solid transparent; color: var(--text); text-align: left; padding: 7px 8px; cursor: pointer; font-size: 14px; }
+.mf-tab:hover { background: #18242a; }
+.mf-tab.on { background: #1b2b31; border-left-color: var(--teal); color: var(--teal); }
+.mf-tab em { font: normal 11px var(--mono); color: #06110f; background: var(--teal); padding: 0 5px; align-self: center; }
+.mf-main { flex: 1; overflow-y: auto; padding: 8px 14px 14px; min-width: 0; }
+.mf-section { margin-bottom: 12px; }
+.mf-section h3 { margin: 8px 0 5px; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--amber); border-bottom: 1px solid var(--line); padding-bottom: 3px; }
+.mf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(245px, 1fr)); gap: 6px; align-items: start; }
+.mf-control { position: relative; display: flex; flex-direction: column; gap: 3px; background: #141e22; border: 1px solid var(--line); padding: 6px 8px; font-size: 14px; min-width: 0; }
+.mf-control small { color: var(--muted); font-size: 12px; line-height: 1.25; }
+.mf-label { display: flex; justify-content: space-between; gap: 6px; padding-right: 16px; }
+.mf-label output { font-family: var(--mono); font-size: 12px; color: var(--teal); }
+.mf-wide { grid-column: 1 / -1; }
+.mf-text { width: 100%; min-height: 0; font-size: 12px; }
+.mf-row { display: flex; gap: 6px; }
+.mf-slider input { width: 100%; accent-color: var(--teal); margin: 0; }
+.mf-select select { width: 100%; }
+.mf-toggle { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; cursor: pointer; }
+.mf-toggle input { position: absolute; opacity: 0; width: 34px; height: 18px; margin: 0; cursor: pointer; }
+.mf-toggle small { grid-column: 1 / -1; }
+.mf-toggle.on { border-color: var(--teal); }
+.mf-toggle input:focus-visible + .mf-switch { outline: 2px solid var(--amber); }
+.mf-switch { width: 34px; height: 18px; background: #2c3c43; display: inline-block; position: relative; }
+.mf-switch::after { content: ''; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; background: var(--muted); transition: left 0.1s; }
+.mf-toggle.on .mf-switch { background: rgba(25, 224, 196, 0.35); }
+.mf-toggle.on .mf-switch::after { left: 18px; background: var(--teal); }
+.mf-reset { position: absolute; top: 3px; right: 4px; background: transparent; border: 0; color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; padding: 2px; }
+.mf-reset:hover { color: var(--amber); }
+.mf-button { text-align: center; font-size: 14px; padding: 6px 10px; line-height: 1.2; letter-spacing: 0.02em; text-transform: none; min-height: 34px; }
+.mf-button.primary { background: var(--teal); border-color: var(--teal); color: #05130f; font-weight: 700; }
+.mf-textline { margin: 0; font-size: 14px; grid-column: 1 / -1; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mf-textline.muted { color: var(--muted); }
+.mf-textline.good { color: var(--teal); }
+.mf-textline.warn { color: #ffdf9e; }
+.mf-textline.bad { color: #ffb4a8; }
+.mf-textline.mono { font-family: var(--mono); font-size: 12px; background: #101a1e; border: 1px solid var(--line); padding: 5px 8px; }
+.mf-unavailable { opacity: 0.8; border-style: dashed; }
+.mf-tag { font: 700 10px var(--mono); color: #1b0805; background: #d0a050; padding: 0 5px; }
+.mf-footer { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 14px; border-top: 1px solid var(--line); justify-content: flex-end; }
+@media (max-width: 760px) {
+  .mf-nav { flex-basis: 118px; }
+  .mf-tab { font-size: 12px; padding: 6px 5px; }
+  .mf-grid { grid-template-columns: 1fr; }
+  .mf-header h2 { font-size: 18px; }
+}
+
+/* Import Mod */
+.mod-import { width: min(620px, 100%); max-height: 88vh; overflow-y: auto; }
+.mod-import-bar { width: 100%; accent-color: var(--teal); }
+.mod-import-facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0 0 8px; }
+.mod-import-facts dt { color: var(--muted); }
+.mod-import-facts dd { margin: 0; font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+.mod-import-list { margin: 4px 0 8px; padding-left: 18px; font-size: 14px; }
+.mod-import .check { align-items: flex-start; margin: 8px 0; }

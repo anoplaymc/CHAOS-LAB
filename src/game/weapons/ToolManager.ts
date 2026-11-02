@@ -126,7 +126,11 @@ export class ToolManager {
 
   fixedUpdate(dt: number): void {
     // Weapons regenerate energy in the background.
-    for (const t of this.tools) t.fixedUpdate(dt);
+    const s = this.game.sandbox;
+    for (const t of this.tools) {
+      t.fixedUpdate(t.kind === 'weapon' ? dt * s.fireRateScale : dt);
+      if (s.infiniteEnergy) t.refillEnergy();
+    }
   }
 
   reset(): void {

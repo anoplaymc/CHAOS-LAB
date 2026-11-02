@@ -58,6 +58,9 @@ export const NS_DOCS: Record<string, string> = {
   events: 'Run code when something happens. See the event table at the end of this document.',
   timer: 'Run code later. Timers run on game time, so they stop while paused, and they are cancelled when the session ends.',
   mode: 'For scripted game modes.',
+  sandbox: 'Temporary overrides for sandbox and test tools. Every one of them is undone when the mod stops, is disabled or faults, and when the session ends, so a mod applies them again from `session_start`. Passing nil to a setter restores the original value.',
+  input: 'Keys a mod can bind. The game\'s own keys and the browser\'s F5, F11 and F12 can\'t be taken.',
+  json: 'Convert plain data to and from JSON text.',
 };
 
-export const NS_ORDER = ['log', 'mod', 'register', 'game', 'entity', 'npc', 'vehicle', 'player', 'physics', 'vec', 'fx', 'sound', 'ui', 'storage', 'events', 'timer', 'mode'];
+export const NS_ORDER = ['log', 'mod', 'register', 'game', 'entity', 'npc', 'vehicle', 'player', 'physics', 'vec', 'fx', 'sound', 'ui', 'storage', 'events', 'timer', 'mode', 'sandbox', 'input', 'json'];

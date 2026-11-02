@@ -11,6 +11,7 @@ All of these are real mods, tested by `src/tests/modtools.test.ts` and `src/test
 | Impulses, raycasts, gravity scale, custom material | `mods/examples/physics_forces/main.chaos` |
 | HUD panel, Mod Menu button, dialog | `mods/examples/ui_panels/main.chaos` |
 | Player-changeable settings | `mods/examples/settings_menu/main.chaos` |
+| A large panel with sliders, a bound key, temporary overrides undone on unload | `mods/examples/sandbox_panel/main.chaos` |
 | Starting points for each kind of mod | `templates/` |
 | Several NPC types, a scripted attack, healing others | `mods/robot_pack/main.chaos` |
 | Furniture, a texture from assets | `mods/furniture_pack/main.chaos` |

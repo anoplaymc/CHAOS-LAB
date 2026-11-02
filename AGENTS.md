@@ -14,7 +14,7 @@ On NixOS, prefix with `nix-shell --run '...'`, or find Node through it first.
 | `npx vitest run` | Unit and simulation tests, with real physics and no browser |
 | `npm run build` | Production build |
 | `npx playwright test` | Browser tests. Needs an X display: `Xvfb :78 -screen 0 1280x800x24 +extension GLX &`, then `DISPLAY=:78` |
-| `npm run mod -- <new\|validate\|test\|info\|list\|api\|pack\|docs>` | Mod toolkit. It needs no browser |
+| `npm run mod -- <new\|validate\|test\|info\|list\|api\|pack\|zip\|docs>` | Mod toolkit. It needs no browser |
 
 Run the type check, tests and build after changes. A green build isn't proof that a change works in the game.
 

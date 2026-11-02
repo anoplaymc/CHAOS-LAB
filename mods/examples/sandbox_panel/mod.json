@@ -1,0 +1,10 @@
+{
+  "id": "example_sandbox_panel",
+  "name": "Example: Sandbox Panel",
+  "description": "A large panel on a bound key, with a toggle and a slider that change the game. The game undoes both when the mod stops.",
+  "version": "1.0.0",
+  "author": "CHAOS LAB",
+  "api_version": "1.1",
+  "permissions": ["ui", "sandbox"],
+  "scripts": ["main.chaos"]
+}

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { Game } from '../game/core/Game';
 import { PERMISSION_INFO } from '../modding/manifest';
-import { bundleToText, type LogEntry, type ModRecord, type ModState } from '../modding/ModManager';
+import { readModZip, type ImportProgress } from '../modding/modImport';
+import { bundleToText, type ImportPreview, type LogEntry, type ModBundle, type ModRecord, type ModState } from '../modding/ModManager';
 import { useUi } from '../app/App';
 
 function useMods(game: Game): number {
@@ -120,6 +121,120 @@ function ModEditor({ game, id, onBack }: { game: Game; id: string; onBack: () =>
   );
 }
 
+type ImportStep =
+  | { at: 'reading'; progress: ImportProgress | null }
+  | { at: 'preview'; bundle: ModBundle; preview: ImportPreview }
+  | { at: 'installing' }
+  | { at: 'done'; record: ModRecord | undefined; errors: string[] }
+  | { at: 'failed'; message: string };
+
+/** Import Mod: reads a ZIP, shows what it would install, and changes nothing until the player says so. */
+function ModImportDialog({ game, file, onClose }: { game: Game; file: File; onClose: () => void }) {
+  const t = game.t.bind(game);
+  const [step, setStep] = useState<ImportStep>({ at: 'reading', progress: null });
+  const [agreed, setAgreed] = useState(false);
+  const cancel = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const control = new AbortController();
+    cancel.current = control;
+    void readModZip(file, { signal: control.signal, onProgress: (progress) => { if (!control.signal.aborted) setStep({ at: 'reading', progress }); } })
+      .then((bundle) => { if (!control.signal.aborted) setStep({ at: 'preview', bundle, preview: game.mods.previewImport(bundle) }); })
+      .catch((e: unknown) => { if (!control.signal.aborted) setStep({ at: 'failed', message: e instanceof Error ? e.message : String(e) }); });
+    return () => control.abort();
+  }, [file, game]);
+
+  const install = (bundle: ModBundle) => {
+    setStep({ at: 'installing' });
+    void game.mods.installBundle(bundle, { followManifest: true })
+      .then((r) => setStep({ at: 'done', record: r.record, errors: [...r.errors, ...(r.record?.errors ?? [])] }))
+      .catch((e: unknown) => setStep({ at: 'failed', message: e instanceof Error ? e.message : String(e) }));
+  };
+
+  let body: React.ReactNode = null;
+  if (step.at === 'reading') {
+    const p = step.progress;
+    body = (
+      <>
+        <p data-testid="mod-import-stage">{t(`mods.import.${p?.stage ?? 'read'}`)} {file.name}</p>
+        <progress data-testid="mod-import-progress" className="mod-import-bar" max={p?.total ?? 1} value={p?.done ?? 0} />
+        <div className="actions"><button className="btn" data-testid="mod-import-cancel" onClick={() => { cancel.current?.abort(); onClose(); }}>{t('mods.import.cancel')}</button></div>
+      </>
+    );
+  } else if (step.at === 'preview') {
+    const { preview: x, bundle } = step;
+    const m = x.manifest;
+    const blocked = x.errors.length > 0 || !m;
+    const needsAgreement = !blocked && !!x.replaces;
+    body = (
+      <div data-testid="mod-import-preview">
+        {m && (
+          <dl className="mod-import-facts">
+            <dt>{t('mods.import.name')}</dt><dd data-testid="mod-import-name">{m.name}</dd>
+            <dt>{t('mods.id')}</dt><dd>{m.id}</dd>
+            <dt>{t('mods.import.version')}</dt><dd data-testid="mod-import-version">{m.version}</dd>
+            <dt>{t('mods.import.author')}</dt><dd data-testid="mod-import-author">{m.author || t('mods.none')}</dd>
+            <dt>API</dt><dd>{m.api_version}</dd>
+          </dl>
+        )}
+        {m?.description && <p className="hint">{m.description}</p>}
+        {m && (
+          <div data-testid="mod-import-permissions">
+            <b>{t('mods.permissions')}</b>
+            {m.permissions.length === 0 && <p className="hint">{t('mods.none')}</p>}
+            <ul className="mod-import-list">{m.permissions.map((p) => <li key={p}><b>{p}</b>: {PERMISSION_INFO[p]}</li>)}</ul>
+          </div>
+        )}
+        {x.dependencies.length > 0 && (
+          <div data-testid="mod-import-deps">
+            <b>{t('mods.needs')}</b>
+            <ul className="mod-import-list">{x.dependencies.map((d) => <li key={d.id} className={d.status === 'ok' ? '' : d.optional ? 'warn-text' : 'err-text'}>{d.id} {d.version}{d.optional ? ` (${t('mods.optional')})` : ''}: {t(`mods.import.dep.${d.status}`)}</li>)}</ul>
+          </div>
+        )}
+        {x.conflicts.length > 0 && <div className="warnbox" data-testid="mod-import-conflicts">{t('mods.import.conflicts', { list: x.conflicts.join(', ') })}</div>}
+        {x.warnings.length > 0 && <div className="warnbox"><b>{t('work.warnings')}</b><ul>{x.warnings.slice(0, 8).map((w, i) => <li key={i}>{w}</li>)}</ul></div>}
+        {x.errors.length > 0 && <div className="error" role="alert" data-testid="mod-import-error"><b>{t('mods.import.refused')}</b><ul>{x.errors.slice(0, 10).map((e, i) => <li key={i}>{e}</li>)}</ul></div>}
+        {needsAgreement && (
+          <label className="check warnbox" data-testid="mod-import-replaces">
+            <input type="checkbox" data-testid="mod-import-agree" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+            {t(x.replaces!.bundled ? 'mods.import.replaceBundled' : 'mods.import.replaceInstalled', { name: x.replaces!.name, version: x.replaces!.version })}
+          </label>
+        )}
+        <div className="actions">
+          <button className="btn" data-testid="mod-import-cancel" onClick={onClose}>{t('mods.import.cancel')}</button>
+          <button className="btn primary" data-testid="mod-import-install" disabled={blocked || (needsAgreement && !agreed)} onClick={() => install(bundle)}>{t(needsAgreement ? 'mods.import.replace' : 'mods.import.install')}</button>
+        </div>
+      </div>
+    );
+  } else if (step.at === 'installing') {
+    body = <p data-testid="mod-import-stage">{t('mods.import.installing')}</p>;
+  } else if (step.at === 'done') {
+    const r = step.record;
+    body = (
+      <>
+        {r && step.errors.length === 0 && <p className="ok" data-testid="mod-import-done">{t(r.enabled ? 'mods.import.doneOn' : 'mods.import.doneOff', { name: r.manifest?.name ?? r.id })}</p>}
+        {step.errors.length > 0 && <div className="error" role="alert" data-testid="mod-import-error"><ul>{step.errors.slice(0, 10).map((e, i) => <li key={i}>{e}</li>)}</ul></div>}
+        <div className="actions"><button className="btn primary" data-testid="mod-import-close" onClick={onClose}>{t('spawn.close')}</button></div>
+      </>
+    );
+  } else {
+    body = (
+      <>
+        <div className="error" role="alert" data-testid="mod-import-error"><b>{t('mods.import.refused')}</b><br />{step.message}</div>
+        <div className="actions"><button className="btn primary" data-testid="mod-import-close" onClick={onClose}>{t('spawn.close')}</button></div>
+      </>
+    );
+  }
+  return (
+    <div className="modal-backdrop" data-testid="mod-import-dialog">
+      <div className="panel mod-import">
+        <h2>{t('mods.import.title')}</h2>
+        {body}
+      </div>
+    </div>
+  );
+}
+
 export function ModManagerPanel({ game, onBack }: { game: Game; onBack: () => void }) {
   const t = game.t.bind(game);
   useMods(game);
@@ -128,8 +243,10 @@ export function ModManagerPanel({ game, onBack }: { game: Game; onBack: () => vo
   const [errors, setErrors] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [done, setDone] = useState<string | null>(null);
+  const [importing, setImporting] = useState<File | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const folder = useRef<HTMLInputElement>(null);
+  const zip = useRef<HTMLInputElement>(null);
   const list = game.mods.list();
 
   const report = (r: { record?: ModRecord; errors: string[]; warnings: string[] }) => {
@@ -162,9 +279,15 @@ export function ModManagerPanel({ game, onBack }: { game: Game; onBack: () => vo
       <div className="actions">
         <button className="btn" data-testid="mods-back" onClick={onBack}>{t('menu.back')}</button>
         <button className="btn" data-testid="mods-reload-all" onClick={() => void game.mods.reloadAll()}>{t('mods.reloadAll')}</button>
+        <button className="btn" data-testid="mods-import" onClick={() => zip.current?.click()}>{t('mods.import.button')}</button>
         <button className="btn" onClick={() => file.current?.click()}>{t('mods.installFile')}</button>
         <button className="btn" onClick={() => folder.current?.click()}>{t('mods.installFolder')}</button>
         <button className="btn" data-testid="mods-console" onClick={() => game.ui.set({ overlay: 'console' })}>{t('mods.console')}</button>
+        <input ref={zip} data-testid="mod-import-input" type="file" accept=".zip,application/zip" hidden onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) setImporting(f);
+          e.target.value = '';
+        }} />
         <input ref={file} data-testid="mod-file-input" type="file" accept=".json,application/json" hidden onChange={(e) => {
           const f = e.target.files?.[0];
           if (f) void f.text().then((text) => game.mods.installText(text)).then(report);
@@ -175,6 +298,7 @@ export function ModManagerPanel({ game, onBack }: { game: Game; onBack: () => vo
           e.target.value = '';
         }} />
       </div>
+      {importing && <ModImportDialog key={`${importing.name}/${importing.lastModified}`} game={game} file={importing} onClose={() => setImporting(null)} />}
     </div>
   );
 }
@@ -210,7 +334,7 @@ export function ModMenuOverlay({ game }: { game: Game }) {
   const press = (run: () => void, closes: boolean) => {
     const before = game.ui.get().modMenu;
     run();
-    if (closes && game.ui.get().modMenu === before) close();
+    if (closes && game.ui.get().modMenu === before && game.ui.get().overlay === 'mod') close();
   };
   if (menu) {
     return (

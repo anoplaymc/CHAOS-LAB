@@ -40,6 +40,14 @@ export class Player {
   health = 100;
   maxHealth = 100;
   gravityFactor = 1;
+  /** Sandbox overrides, set through game.sandbox. At these defaults they change nothing. */
+  god = false;
+  speedScale = 1;
+  jumpScale = 1;
+  gravityScale = 1;
+  flySpeedScale = 1;
+  /** Flight that stops at walls, unlike the usual noclip flight. */
+  private flightCollides = false;
   driving: DriveTarget | null = null;
   groundTag: string | null = null;
   private airTime = 0;
@@ -93,6 +101,7 @@ export class Player {
     this.velocity = { x: 0, y: 0, z: 0 };
     this.grounded = false;
     this.flying = false;
+    this.flightCollides = false;
     this.crouching = false;
     this.dead = false;
     this.driving = null;
@@ -186,10 +195,23 @@ export class Player {
   toggleFlight(): void {
     if (this.driving || this.dead || !this.game.rules.flight) return;
     this.flying = !this.flying;
+    this.flightCollides = false;
     this.collider?.setEnabled(!this.flying);
     this.velocity.y = 0;
     this.game.toast(this.game.t(this.flying ? 'toast.flightOn' : 'toast.flightOff'), 'info');
     if (!this.flying) this.unstuck();
+  }
+
+  /** Flight chosen outright, whatever the mode's rules say. `noclip` passes through everything. */
+  setFlight(on: boolean, noclip: boolean): boolean {
+    if (this.driving || this.dead || !this.body) return false;
+    const was = this.flying;
+    this.flying = on;
+    this.flightCollides = on && !noclip;
+    this.collider?.setEnabled(!on || !noclip);
+    if (was !== on) this.velocity.y = 0;
+    if (was && !on) this.unstuck();
+    return true;
   }
 
   /** Moves to the nearest spot where the capsule fits, after leaving noclip or a vehicle. */
@@ -253,7 +275,7 @@ export class Player {
   }
 
   takeDamage(amount: number, _source: string, attacker?: Entity | null): void {
-    if (this.dead || this.flying || !this.game.rules.damage || amount <= 0) return;
+    if (this.dead || this.god || this.flying || !this.game.rules.damage || amount <= 0) return;
     this.health -= amount;
     this.game.events.emit('playerDamaged', { amount, source: _source, attacker: attacker ?? null });
     this.lastHurt = this.game.time;
@@ -310,6 +332,7 @@ export class Player {
     const b = this.body;
     const col = this.collider;
     if (!b || !col || !this.controller) return;
+    if (this.god && !this.dead) this.health = this.maxHealth;
     if (this.driving) {
       // The capsule rides along invisibly so distance checks stay meaningful.
       const p = this.driving.entity.position;
@@ -340,13 +363,13 @@ export class Player {
 
     this.setCrouch(input.isDown('crouch'));
     const sprint = input.isDown('sprint') && !this.crouching;
-    const maxSpeed = this.crouching ? 2.9 : sprint ? 9.2 : 5.8;
-    const gravity = Math.abs(this.game.physics.w.gravity.y) * this.gravityFactor;
+    const maxSpeed = (this.crouching ? 2.9 : sprint ? 9.2 : 5.8) * this.speedScale;
+    const gravity = Math.abs(this.game.physics.w.gravity.y) * this.gravityFactor * this.gravityScale;
     const wantX = wishX * maxSpeed;
     const wantZ = wishZ * maxSpeed;
 
     // Acceleration: strong on the ground, limited in the air, with friction only when grounded.
-    const accel = this.grounded ? (wishLen > 0 ? 60 : 46) : this.game.rules.airControl * 40;
+    const accel = (this.grounded ? (wishLen > 0 ? 60 : 46) : this.game.rules.airControl * 40) * Math.max(1, this.speedScale);
     const dvx = wantX - this.velocity.x;
     const dvz = wantZ - this.velocity.z;
     const dvLen = Math.hypot(dvx, dvz);
@@ -363,7 +386,7 @@ export class Player {
     if (this.jumpBuffer > 0 && this.airTime < COYOTE) {
       // Take-off speed follows world gravity only, so a low-gravity zone really does mean higher jumps.
       const g = Math.max(1, Math.abs(this.game.physics.w.gravity.y));
-      this.velocity.y = Math.sqrt(2 * g * JUMP_HEIGHT);
+      this.velocity.y = Math.sqrt(2 * g * JUMP_HEIGHT * this.jumpScale);
       this.jumpBuffer = 0;
       this.airTime = COYOTE + 1;
       this.grounded = false;
@@ -484,7 +507,7 @@ export class Player {
     const b = this.body!;
     const input = this.game.input;
     const sprint = input.isDown('sprint');
-    const speed = sprint ? 26 : 12;
+    const speed = (sprint ? 26 : 12) * this.flySpeedScale;
     const vert = (input.isDown('jump') ? 1 : 0) - (input.isDown('crouch') ? 1 : 0);
     const pitchY = Math.sin(this.pitch) * fwd;
     const flat = Math.cos(this.pitch);
@@ -496,7 +519,13 @@ export class Player {
     this.velocity.y += (ty - this.velocity.y) * k;
     this.velocity.z += (tz - this.velocity.z) * k;
     const p = b.translation();
-    b.setNextKinematicTranslation({ x: p.x + this.velocity.x * dt, y: p.y + this.velocity.y * dt, z: p.z + this.velocity.z * dt });
+    if (this.flightCollides && this.collider) {
+      this.controller!.computeColliderMovement(this.collider, { x: this.velocity.x * dt, y: this.velocity.y * dt, z: this.velocity.z * dt }, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, groups(Group.PLAYER, Group.STATIC | Group.PROP | Group.NPC | Group.VEHICLE));
+      const mv = this.controller!.computedMovement();
+      b.setNextKinematicTranslation({ x: p.x + mv.x, y: p.y + mv.y, z: p.z + mv.z });
+    } else {
+      b.setNextKinematicTranslation({ x: p.x + this.velocity.x * dt, y: p.y + this.velocity.y * dt, z: p.z + this.velocity.z * dt });
+    }
     this.grounded = false;
     this.fallSpeed = 0;
   }

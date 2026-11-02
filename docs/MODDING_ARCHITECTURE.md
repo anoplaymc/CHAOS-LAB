@@ -21,6 +21,10 @@ src/chaosscript/                      The language: lexer, parser, linter, inter
 
 ## Decisions
 
+**Temporary overrides are recorded by the game.** A stopped or faulted script can't clean up after itself, so `src/modding/SandboxControl` keeps a ledger: each `sandbox.*` change records how to undo it and which mod made it. The ledger is released when that mod unloads or faults and when the session ends. The defaults change nothing, so a game with no such mod behaves as before. Saves store a rule's real value, not its override.
+
+**Rich panels are data.** `ui.open_panel` sends a table that `src/modding/form` checks and copies, field by field, and `src/ui/ModForm` draws as text. A script gets one handler for everything done in the panel, so redrawing doesn't create new callbacks to keep alive.
+
 **Tree-walking interpreter on the main thread.** NPC thinking, tool clicks and damage hooks have to answer within a physics step, so they can't wait on a Worker. Isolation therefore comes from the interpreter:
 
 - Script values are `nil`, booleans, numbers, strings, `Table`s and functions. A table is a `Map`, so no script key can reach a JavaScript property or prototype.

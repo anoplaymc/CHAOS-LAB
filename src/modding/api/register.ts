@@ -3,7 +3,7 @@ import { CATEGORIES, type Category, type ItemDef, type ShapeDef } from '../../da
 import { materials, type ImpactSound, type Loc } from '../../data/materials';
 import { registerItem, registerMap, registerMaterial, registerMode, registerNpcType, registerToolType, onUnregister } from '../../game/content/registry';
 import type { ModelPart, NpcBehaviorName, ScriptHooks, VehicleSpec } from '../../game/content/types';
-import type { MapDef } from '../../game/maps/MapBuilder';
+import { SKY_PRESETS, type MapDef } from '../../game/maps/MapBuilder';
 import { LEVEL_MATERIALS } from '../../game/mods/pack';
 import { PERSONALITIES, type NpcProfile } from '../../game/npcs/NpcBrain';
 import { DataTool, type DataToolSpec } from '../../game/weapons/DataTool';
@@ -218,13 +218,6 @@ const BUILTIN_SIGNALS: Record<string, ItemDef['signal']> = {
 };
 const ALWAYS_FIXED = new Set(['button', 'lever', 'plate', 'timer', 'inverter', 'lamp', 'fan', 'spring_pad', 'delay', 'latch', 'conveyor', 'magnet', 'dispenser', 'teleporter', 'alarm']);
 
-const SKIES: Record<string, Pick<MapDef, 'sky' | 'fog' | 'sun' | 'hemi'>> = {
-  day: { sky: { top: 0x24384a, horizon: 0x8aa0a8, bottom: 0x20282c }, fog: { color: 0x8aa0a8, density: 0.004 }, sun: { dir: { x: 0.5, y: 0.8, z: 0.3 }, color: 0xfff0d8, intensity: 2.6 }, hemi: { sky: 0xcfe0f0, ground: 0x6a6a64, intensity: 1.1 } },
-  dusk: { sky: { top: 0x2a2440, horizon: 0xd8805a, bottom: 0x241c24 }, fog: { color: 0xc07858, density: 0.006 }, sun: { dir: { x: -0.7, y: 0.35, z: 0.4 }, color: 0xffb080, intensity: 2.2 }, hemi: { sky: 0xc09090, ground: 0x4a4048, intensity: 0.9 } },
-  night: { sky: { top: 0x060a14, horizon: 0x18243a, bottom: 0x05070c }, fog: { color: 0x18243a, density: 0.008 }, sun: { dir: { x: 0.3, y: 0.8, z: -0.4 }, color: 0x8aa8e0, intensity: 0.7 }, hemi: { sky: 0x4a5a80, ground: 0x20242c, intensity: 0.7 } },
-  cloud: { sky: { top: 0x6a7a88, horizon: 0xb8c4cc, bottom: 0x505860 }, fog: { color: 0xb8c4cc, density: 0.007 }, sun: { dir: { x: 0.2, y: 0.9, z: 0.3 }, color: 0xe8e8e8, intensity: 1.5 }, hemi: { sky: 0xd0d8e0, ground: 0x707478, intensity: 1.3 } },
-};
-
 function buildMap(h: ModHost, f: Record<string, unknown>, id: string): MapDef {
   const where = `register.map "${id}"`;
   const num3 = (v: Value, w: string): [number, number, number] => {
@@ -263,7 +256,7 @@ function buildMap(h: ModHost, f: Record<string, unknown>, id: string): MapDef {
     const n = (k: string) => { const v = z.get(k); return typeof v === 'number' ? v : undefined; };
     return { type, min: h.vec3(z.get('min'), `${w}: min`), max: h.vec3(z.get('max'), `${w}: max`), gravity: n('gravity'), speed: n('speed') } as const;
   });
-  const look = SKIES[(f.sky as string | undefined) ?? 'day']!;
+  const look = SKY_PRESETS[(f.sky as string | undefined) ?? 'day']!;
   let nav: MapDef['nav'] = null;
   if (f.nav !== false) {
     let [minX, maxX, minZ, maxZ, topY, bottomY] = [Infinity, -Infinity, Infinity, -Infinity, -Infinity, Infinity];

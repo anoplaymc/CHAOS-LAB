@@ -5,3 +5,6 @@ playwright-report
 *.local
 .vite
 dist-mods
+# CHAOS OVERDRIVE is published on its own, from its own repository.
+release
+mods/chaos_overdrive/

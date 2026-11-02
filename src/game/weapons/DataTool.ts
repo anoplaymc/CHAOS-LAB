@@ -111,6 +111,8 @@ export class DataTool extends Tool {
     this.pool?.tick(dt);
   }
 
+  override refillEnergy(): void { this.pool?.refill(); }
+
   override update(dt: number): void {
     if (this.down && this.spec.automatic) this.tryFire();
     this.spec.onUpdate?.(this.game, dt);

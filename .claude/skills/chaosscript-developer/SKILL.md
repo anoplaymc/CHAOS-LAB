@@ -37,6 +37,7 @@ npm run mod -- new my_mod npc     # templates: starter prop npc tool weapon vehi
 npm run mod -- validate my_mod    # structure, manifest, syntax, API use, permissions, real load
 npm run mod -- test my_mod 10     # uses everything it registers, reloads it, runs the world
 npm run mod -- info my_mod        # what it declares, whether it loads, what it registers
+npm run mod -- zip my_mod         # a ZIP for Import Mod in the game's Mods screen
 ```
 
 Write only under `mods/<id>/`. Problems print as `file:line: message`. Fix them from the top, using `docs/MODDING_TROUBLESHOOTING.md`, and repeat until both commands exit with 0.

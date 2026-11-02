@@ -32,6 +32,19 @@
 | Failed to load | A script raised an error at the top level | The error gives the line. Everything it registered was removed |
 | Stopped after errors | It kept failing while running, or hit its limits | Check the console for the first error, fix it, reload |
 
+## Import Mod refuses an archive
+
+Only the folder holding `mod.json` is read, and from it only scripts and images. Nothing in an archive runs during an import.
+
+| Message | Cause |
+| --- | --- |
+| has a path that climbs out of the archive, an absolute path, a drive letter, a backslash | A file's name could lead outside the mod. The whole archive is refused, even if that file isn't part of the mod |
+| is a symbolic link, is encrypted, appears more than once | These are refused too |
+| too large, too many files, unpacks to too much data | Limits: 16 MB archive, 512 files, 8 MB per file, 32 MB unpacked, 8 MB of scripts and images |
+| unpacks to more than it declares, fails its checksum | The archive is damaged or was built to mislead |
+| has no mod.json, holds more than one mod, mod.json is too deep | `mod.json` should be at the top, in one folder, or in two as in GitHub's ZIP of a repository |
+| needs API version | The mod was written for a newer game. Update the game |
+
 ## Common error messages
 
 | Message | Cause | Fix |

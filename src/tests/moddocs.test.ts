@@ -16,7 +16,7 @@ const blocks = (text: string, lang: string) => [...text.matchAll(new RegExp('^``
 
 const bundle = (source: string): ModBundle => ({
   origin: 'local',
-  manifest: JSON.stringify({ id: 'doc_example', name: 'Doc', description: 'x', version: '1.0.0', author: 'x', api_version: '1.0', permissions: ['content', 'world', 'player', 'effects', 'ui', 'storage', 'rules'], scripts: ['main.chaos'] }),
+  manifest: JSON.stringify({ id: 'doc_example', name: 'Doc', description: 'x', version: '1.0.0', author: 'x', api_version: '1.0', permissions: ['content', 'world', 'player', 'effects', 'ui', 'storage', 'rules', 'sandbox'], scripts: ['main.chaos'] }),
   files: { 'main.chaos': source },
 });
 

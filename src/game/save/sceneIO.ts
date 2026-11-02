@@ -71,7 +71,8 @@ export function serializeScene(game: Game, name: string, kind: SaveFile['kind'])
     createdAt: new Date().toISOString(),
     map: game.session.map,
     mode: game.session.mode,
-    rules: { gravity: game.rules.gravity, damage: game.rules.damage, aggression: game.rules.aggression },
+    // A temporary sandbox override isn't part of the scene: it saves what the rule was before it.
+    rules: { gravity: game.rules.gravity, damage: game.rules.damage, aggression: game.rules.aggression, ...game.sandbox.baseRules },
     nextId: game.entities.registry.nextId,
     entities,
     links: game.connections.list().filter((l) => (ids.has(l.a) || fixture(l.a)) && (l.b === 0 || ids.has(l.b) || fixture(l.b))),

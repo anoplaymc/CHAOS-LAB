@@ -1,9 +1,9 @@
 import { closest } from '../chaosscript';
 
 /** The API version this build of the game provides. */
-export const API_VERSION = '1.0';
+export const API_VERSION = '1.1';
 
-export const PERMISSIONS = ['content', 'world', 'player', 'effects', 'ui', 'storage', 'rules'] as const;
+export const PERMISSIONS = ['content', 'world', 'player', 'effects', 'ui', 'storage', 'rules', 'sandbox'] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
 export const PERMISSION_INFO: Record<Permission, string> = {
@@ -14,6 +14,7 @@ export const PERMISSION_INFO: Record<Permission, string> = {
   ui: 'Show messages, panels, menus and buttons.',
   storage: 'Save data between sessions (up to 256 KB).',
   rules: 'Change session rules such as gravity and damage.',
+  sandbox: 'Override the player\'s abilities, time, lighting, weapons, NPC behaviour and debug views. All of it is undone when the mod stops.',
 };
 
 const ID_RE = /^[a-z][a-z0-9_]{1,47}$/;

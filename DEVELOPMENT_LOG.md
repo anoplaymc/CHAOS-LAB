@@ -280,3 +280,33 @@ See the session report: all suites passed on the final code. One real-input chec
 ### Not verified
 - The cold agents worked with this log, the test suite and engine source available, and read engine source when docs weren't enough. Neither wrote anything in `src/` except a test.
 - Security Robots hasn't been played by hand. Real E and M presses are covered by a scratch drive, which isn't in the repo's test suite.
+
+## Checkpoint 8: CHAOS OVERDRIVE and the sandbox API (2026-11-02)
+
+Added `mods/chaos_overdrive`, a large sandbox control menu, off by default. API version 1.1 adds a `sandbox` permission and namespace, `ui.open_panel` and related calls, `input.bind`, `json`, `game.item_info`, `mod.logs`, `mod.status` and `mod.api`. `src/modding/SandboxControl.ts` records how to undo each override, and undoes them when a mod stops or a session ends. Git tag `checkpoint/pre-chaos-overdrive` marks the state before this work.
+
+### Verified
+- `src/tests/chaosoverdrive.test.ts`: behaviour against a real game, including a full disable restoring every value. Breaking the mod on purpose in four places made the matching tests fail.
+- `e2e/chaosoverdrive.spec.ts`: real keys and mouse in Firefox under Xvfb, through the Mod Manager, with a page reload.
+
+### Found by testing
+- A flaky-looking test showed a stopped NPC kept its last target. It's now cleared.
+- A Mod Menu button opening a panel had the panel closed behind it, and the fix covers both dialog types.
+- At a small menu scale the panel slid off the screen. Only a screenshot showed it.
+
+### Not verified
+- Nobody has played it by hand. How the menu feels, and how the settings play at their extremes, is unjudged.
+- Real pointer lock, and frame rate on a real GPU with the collider overlay on.
+- Most rows beyond the behaviour tests are only exercised for not causing errors.
+
+## Checkpoint 9: Import Mod, and CHAOS OVERDRIVE as a separate release (2026-11-02)
+
+Added **Mods > Import Mod** for ZIP archives, `src/modding/zip.ts`, `src/modding/modImport.ts`, `npm run mod -- zip`, and `mods/examples/sandbox_panel`. CHAOS OVERDRIVE is published from its own repository, so `mods/chaos_overdrive/` and `release/` are in `.gitignore`, and its tests skip when it's absent.
+
+### Verified
+- `src/tests/modimport.test.ts` and `e2e/modimport.spec.ts`: hostile and broken archives, previews, replacing, removing.
+- On a copy of exactly the files this repository would hold: type check, unit tests, build, browser tests. Against its production build: the release ZIP and a repository-shaped ZIP through Import Mod. With the release ZIP unpacked into `mods/`: dev server and rebuilt production.
+
+### Not verified
+- Import Mod in anything but Firefox. It relies on the browser's `DecompressionStream`.
+- A ZIP really downloaded from GitHub, since the repository doesn't exist yet. The test builds one of the same shape.

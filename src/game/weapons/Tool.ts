@@ -34,6 +34,8 @@ export abstract class Tool {
   update(_dt: number): void {}
   fixedUpdate(_dt: number): void {}
   abstract hud(): ToolHud;
+  /** Tops up an energy bar, for tools that have one. */
+  refillEnergy(): void {}
   /** Clears transient state on map change. */
   reset(): void {}
 }

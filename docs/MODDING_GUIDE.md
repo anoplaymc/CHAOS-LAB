@@ -146,12 +146,15 @@ A mod declares what it needs in the manifest. Calling something without permissi
 | `npm run mod -- info <mod>` | Show what it declares, whether it loads, and what it registers |
 | `npm run mod -- api [word]` | Search the API from the command line |
 | `npm run mod -- pack <mod>` | Create `dist-mods/<id>.chaosmod.json` to share |
+| `npm run mod -- zip <mod>` | Create `dist-mods/<id>-<version>.zip` and its SHA-256, for Import Mod |
 | `npm run mod -- list` | List mods and reference examples |
-| **Mods** menu | Enable, disable, reload, edit, see errors, install from a file or folder |
+| **Mods** menu | Enable, disable, reload, edit, see errors, import a ZIP, install from a file or folder |
 | **`** key | Debug console: logs, commands (`help`), and live ChaosScript |
 
 ## Sharing a mod
 
-`npm run mod -- pack mods/my_mod` makes one file. Players install it from **Mods > Install file**, or from a folder with **Install folder**. There is no online workshop yet: mods are shared as files.
+`npm run mod -- zip mods/my_mod` makes a ZIP. Players install it with **Mods > Import Mod**, which shows the mod's name, version, author, permissions and dependencies first, and changes nothing until they choose **Install**. It accepts a ZIP with `mod.json` at the top, in the mod's folder, or inside a GitHub repository's ZIP, as long as the archive holds one mod. A mod that says `"enabled_by_default": false` arrives turned off.
+
+`npm run mod -- pack mods/my_mod` makes a `.chaosmod.json` file for **Mods > Install file**, and **Install folder** takes a mod's folder. There is no online workshop yet: mods are shared as files.
 
 A mod installed this way lives in the browser's storage. Editing a bundled mod in the game makes a local copy, and *Discard edits* goes back to the original.

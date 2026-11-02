@@ -31,7 +31,7 @@ Every mod has a `mod.json` at the top of its folder.
 | `id` | Yes | Unique id: a lowercase letter, then lowercase letters, digits or `_`, 2 to 48 characters. It prefixes everything the mod registers. |
 | `name` | Yes | Display name, up to 80 characters. |
 | `version` | Yes | `major.minor.patch`, such as `1.2.0`. |
-| `api_version` | Yes | The API version it was written for, such as `"1.0"`. This game provides 1.0. A mod loads if the major number is equal and its minor number isn't higher than the game's. |
+| `api_version` | Yes | The API version it was written for, such as `"1.0"`. This game provides 1.1. A mod loads if the major number is equal and its minor number isn't higher than the game's. |
 | `scripts` | Yes | `.chaos` files to run, in order. At least one. Paths are relative and stay inside the mod. |
 | `author` | No | A warning if missing. |
 | `description` | No | Up to 600 characters. A warning if missing. |
@@ -77,6 +77,7 @@ If two sources provide the same mod id, the later one wins: installed copies ove
 | `ui` | `ui.*` |
 | `storage` | `storage.*` |
 | `rules` | `game.set_gravity`, `game.set_damage`, `game.set_aggression` |
+| `sandbox` | `sandbox.*`: temporary overrides of the player, time, lighting, weapons, NPC behaviour and debug views, all undone when the mod stops |
 
 Reading the world, `log`, `events`, `timer`, `vec` and `physics` queries are always allowed. [CHAOSSCRIPT_API.md](CHAOSSCRIPT_API.md) gives the permission of each function.
 

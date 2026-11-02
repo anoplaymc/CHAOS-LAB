@@ -1,0 +1,38 @@
+-- A panel is plain data, with one handler for everything done in it. Press F9 during play.
+-- sandbox.* changes are undone by the game when this mod stops, and at the end of each session.
+local god = false
+local speed = 1
+
+local function view()
+  return {
+    title = "Sandbox Panel",
+    sections = {
+      { title = "Player", controls = {
+        { type = "toggle", id = "god", label = "God Mode", value = god },
+        { type = "slider", id = "speed", label = "Speed", value = speed, min = 0.5, max = 5, step = 0.5, unit = "×" },
+      } },
+    },
+  }
+end
+
+local function on_event(e)
+  if e.id == "god" then
+    god = e.value
+    sandbox.set_god(god)
+  elseif e.id == "speed" then
+    speed = e.value
+    sandbox.set_player_tuning{ speed = speed }
+  end
+  ui.update_panel(view())
+end
+
+input.bind("F9", function()
+  if not game.in_session() then return end
+  if ui.panel_open() then ui.close_panel() else ui.open_panel(view(), on_event) end
+end)
+
+-- The game has undone both by now, so the panel starts from the same place.
+events.on("session_start", function(e)
+  god = false
+  speed = 1
+end)

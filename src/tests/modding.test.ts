@@ -20,7 +20,7 @@ export function bundle(source: string, o: ModOptions = {}): ModBundle {
     origin: 'local',
     manifest: JSON.stringify({
       id, name: id, description: 'test', version: o.version ?? '1.0.0', author: 'test', api_version: o.api ?? '1.0',
-      permissions: o.permissions ?? ['content', 'world', 'player', 'effects', 'ui', 'storage', 'rules'],
+      permissions: o.permissions ?? ['content', 'world', 'player', 'effects', 'ui', 'storage', 'rules', 'sandbox'],
       dependencies: o.dependencies ?? [], conflicts: o.conflicts ?? [], scripts: Object.keys(files), hot_reload: o.hot_reload,
     }),
     files,

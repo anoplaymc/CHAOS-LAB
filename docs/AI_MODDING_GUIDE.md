@@ -139,6 +139,12 @@ npm run mod -- pack mods/my_mod
 
 Writes `dist-mods/my_mod.chaosmod.json`.
 
+```sh
+npm run mod -- zip mods/my_mod
+```
+
+Writes `dist-mods/my_mod-1.0.0.zip` and its SHA-256, for **Import Mod** in the Mods screen. The archive holds one folder named after the mod.
+
 A mod in `mods/<id>/` is already installed for development: `npm run dev` loads it, and the next `npm run build` bundles it, enabled unless its manifest says `"enabled_by_default": false`. A mod in `mods/examples/` isn't part of the game. Other files in a mod's folder, such as `README.md`, are ignored by the loader.
 
 ## Checklist before saying it's done
