@@ -1,0 +1,22 @@
+register.vehicle{
+  id = "rover",
+  name = "Rover",
+  desc = "Six wheels and not much of a top speed.",
+  size = {x = 1.6, y = 0.5, z = 3},
+  material = "metal",
+  model = {
+    { shape = "rbox", size = {1.6, 0.4, 3}, color = 0xd9b02b },
+    { shape = "rbox", size = {1.2, 0.5, 1.2}, pos = {0, 0.4, -0.3}, material = "blackened" },
+  },
+  wheels = {
+    {x = -0.9, y = -0.2, z = -1.1}, {x = 0.9, y = -0.2, z = -1.1},
+    {x = -0.9, y = -0.2, z = 0.1}, {x = 0.9, y = -0.2, z = 0.1},
+    {x = -0.9, y = -0.2, z = 1.1}, {x = 0.9, y = -0.2, z = 1.1},
+  },
+  wheel_radius = 0.42,
+  suspension = 0.45,
+  engine = 1300,
+  top_speed = 15,
+  steer = 0.5,
+  grip = 3,
+}

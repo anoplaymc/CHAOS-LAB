@@ -1,0 +1,10 @@
+{
+  "id": "example_tool_and_weapon",
+  "name": "Example: Tool and Weapon",
+  "description": "A scripted tool and a data-only weapon.",
+  "version": "1.0.0",
+  "author": "CHAOS LAB",
+  "api_version": "1.0",
+  "permissions": ["content", "world", "effects"],
+  "scripts": ["main.chaos"]
+}

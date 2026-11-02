@@ -1,0 +1,21 @@
+-- Runs once when the mod loads. register.* calls belong here at the top level.
+
+register.prop{
+  id = "my_box",
+  name = "My Box",
+  desc = "Press E on it.",
+  shape = { type = "box", size = {1, 1, 1} },
+  material = "wood",
+  color = 0x19e0c4,
+  prompt = "E  Poke",
+  on_interact = function(self)
+    fx.burst(entity.position(self), 20, 0x19e0c4, 5)
+    ui.toast("Poked!")
+    return true
+  end,
+}
+
+-- Runs whenever a session starts.
+events.on("session_start", function(e)
+  log.info("Playing on", e.map)
+end)

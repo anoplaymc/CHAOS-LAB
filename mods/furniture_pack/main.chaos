@@ -1,0 +1,141 @@
+-- Furniture Pack: new physical props, made entirely of data.
+
+local WOOD = 0x9a6a3a
+local DARK = 0x4a3220
+local FABRIC = 0xa04848
+
+register.material{
+  id = "cushion",
+  name = { en = "Cushion", ru = "Подушка" },
+  friction = 1.0,
+  restitution = 0.35,
+  density = 25,
+  sound = "rubber",
+  fragility = 0,
+  tint = FABRIC,
+}
+
+-- Four legs under a rectangular top. Local helper: scripts can build their model tables however they like.
+local function legs(w, d, h, y, color)
+  local parts = {}
+  for _, sx in ipairs({-1, 1}) do
+    for _, sz in ipairs({-1, 1}) do
+      table.insert(parts, { shape = "box", size = {0.07, h, 0.07}, pos = {sx * (w - 0.07) / 2, y, sz * (d - 0.07) / 2}, color = color })
+    end
+  end
+  return parts
+end
+
+local function with(parts, more)
+  for _, p in ipairs(more) do table.insert(parts, p) end
+  return parts
+end
+
+register.prop{
+  id = "dining_chair",
+  name = { en = "Dining Chair", ru = "Обеденный стул" },
+  desc = { en = "Throw it. Everyone does.", ru = "Бросьте его. Все так делают." },
+  shape = { type = "box", size = {0.5, 1, 0.5} },
+  material = "wood",
+  break_speed = 8,
+  health = 25,
+  debris = "wood",
+  debris_count = 5,
+  model = with(legs(0.5, 0.5, 0.46, -0.27, DARK), {
+    { shape = "box", size = {0.5, 0.05, 0.5}, pos = {0, -0.03, 0}, color = WOOD },
+    { shape = "box", size = {0.5, 0.45, 0.04}, pos = {0, 0.24, -0.23}, color = WOOD },
+  }),
+}
+
+register.prop{
+  id = "dining_table",
+  name = { en = "Dining Table", ru = "Обеденный стол" },
+  desc = { en = "Seats six, launches them too.", ru = "На шестерых. И запускает всех шестерых." },
+  shape = { type = "box", size = {2.2, 0.8, 1} },
+  material = "wood",
+  break_speed = 12,
+  health = 90,
+  debris = "wood",
+  debris_count = 8,
+  model = with(legs(2.2, 1, 0.74, -0.03, DARK), {
+    { shape = "box", size = {2.2, 0.07, 1}, pos = {0, 0.365, 0}, color = WOOD },
+  }),
+}
+
+register.prop{
+  id = "armchair",
+  name = { en = "Armchair", ru = "Кресло" },
+  desc = { en = "Soft and very bouncy.", ru = "Мягкое и очень упругое." },
+  shape = { type = "box", size = {0.9, 0.9, 0.85} },
+  material = "cushion",
+  model = {
+    { shape = "rbox", size = {0.9, 0.4, 0.85}, pos = {0, -0.25, 0}, color = FABRIC },
+    { shape = "rbox", size = {0.9, 0.5, 0.2}, pos = {0, 0.2, -0.32}, color = FABRIC },
+    { shape = "rbox", size = {0.15, 0.3, 0.8}, pos = {-0.38, 0.05, 0}, color = 0x803838 },
+    { shape = "rbox", size = {0.15, 0.3, 0.8}, pos = {0.38, 0.05, 0}, color = 0x803838 },
+  },
+}
+
+register.prop{
+  id = "wardrobe",
+  name = { en = "Wardrobe", ru = "Гардероб" },
+  desc = { en = "Tall, heavy and top-heavy.", ru = "Высокий, тяжёлый, с высоким центром тяжести." },
+  shape = { type = "box", size = {1.2, 2.2, 0.6} },
+  material = "wood",
+  break_speed = 12,
+  health = 120,
+  debris = "wood",
+  debris_count = 9,
+  model = {
+    { shape = "box", size = {1.2, 2.2, 0.6}, color = DARK },
+    { shape = "box", size = {0.57, 2.1, 0.02}, pos = {-0.3, 0, 0.31}, color = WOOD },
+    { shape = "box", size = {0.57, 2.1, 0.02}, pos = {0.3, 0, 0.31}, color = WOOD },
+    { shape = "sphere", r = 0.03, pos = {-0.07, 0, 0.33}, material = "steel" },
+    { shape = "sphere", r = 0.03, pos = {0.07, 0, 0.33}, material = "steel" },
+  },
+}
+
+-- Interactive: E toggles a light. Per-entity state goes in entity data, which saved games keep.
+register.prop{
+  id = "desk_lamp",
+  name = { en = "Desk Lamp", ru = "Настольная лампа" },
+  desc = { en = "Press E to switch it on.", ru = "Нажмите E, чтобы включить." },
+  shape = { type = "cylinder", r = 0.14, h = 0.55 },
+  material = "metal",
+  prompt = { en = "E  Switch", ru = "E  Переключить" },
+  model = {
+    { shape = "cylinder", r = 0.14, h = 0.04, pos = {0, -0.25, 0}, material = "steel_dark" },
+    { shape = "cylinder", r = 0.02, h = 0.45, pos = {0, -0.02, 0}, material = "steel" },
+    { shape = "cone", r = 0.14, h = 0.14, pos = {0, 0.22, 0}, material = "paint_amber" },
+  },
+  on_interact = function(self)
+    local on = not entity.get_data(self, "on")
+    entity.set_data(self, "on", on)
+    sound.play("lever", 0.6, entity.position(self))
+    entity.set_tint(self, on and 0xfff0a0 or nil)
+    return true
+  end,
+  tick_rate = 0.4,
+  on_tick = function(self, dt)
+    if entity.get_data(self, "on") then
+      fx.flash(entity.position(self), 0xffe0a0, 8)
+    end
+  end,
+}
+
+-- Uses an image from assets/, declared in mod.json.
+register.prop{
+  id = "poster",
+  name = { en = "Safety Poster", ru = "Плакат по безопасности" },
+  desc = { en = "Stands against a wall, ignored by everyone.", ru = "Стоит у стены, и все его игнорируют." },
+  shape = { type = "box", size = {1, 1.4, 0.06} },
+  material = "wood",
+  break_speed = 4,
+  health = 8,
+  debris = "wood",
+  model = {
+    { shape = "box", size = {1, 1.4, 0.05}, texture = "assets/poster.png" },
+  },
+}
+
+log.info("Furniture Pack ready")

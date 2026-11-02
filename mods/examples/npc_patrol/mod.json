@@ -1,0 +1,10 @@
+{
+  "id": "example_npc_patrol",
+  "name": "Example: NPC Patrol",
+  "description": "An NPC with a data profile, a patrol route set by script, event reactions and a talk prompt.",
+  "version": "1.0.0",
+  "author": "CHAOS LAB",
+  "api_version": "1.0",
+  "permissions": ["content", "world", "effects"],
+  "scripts": ["main.chaos"]
+}

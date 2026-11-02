@@ -1,0 +1,31 @@
+register.npc{
+  id = "helper",
+  name = "Helper Bot",
+  desc = "Follows you when asked.",
+  height = 1.2,
+  model = { base = "robot", color = 0x2fb56a, accent = 0x20282c },
+  material = "metal",
+  health = 80,
+  walk_speed = 2.5,
+  run_speed = 4.5,
+  faction = "lab",
+  voice = "robot",
+  behavior = "wander",
+  prompt = "E  Follow / stay",
+  on_interact = function(self)
+    if npc.order(self) == "follow" then
+      npc.stop(self)
+      npc.say(self, "Staying.")
+    else
+      npc.follow(self)
+      npc.say(self, "Coming.")
+    end
+    return true
+  end,
+  on_think = function(self, dt)
+    -- Runs 4 times a second. Keep it short.
+  end,
+  on_death = function(self, by_player)
+    fx.explosion(entity.position(self), 2)
+  end,
+}

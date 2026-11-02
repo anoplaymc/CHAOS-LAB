@@ -1,0 +1,39 @@
+-- There's no dedicated settings system. Settings are values in storage, with defaults, changed through a menu.
+local DEFAULTS = { volume = 1, messages = true }
+
+local function get(name)
+  local v = storage.get(name)
+  if v == nil then return DEFAULTS[name] end
+  return v
+end
+
+local function open_settings()
+  ui.open_menu{
+    title = "Example settings",
+    text = "These are kept between sessions.",
+    buttons = {
+      { label = "Volume: " .. get("volume"), close = false, on_click = function()
+        storage.set("volume", get("volume") % 3 + 1)
+        ui.close_menu()
+        open_settings()
+      end },
+      { label = "Messages: " .. (get("messages") and "on" or "off"), close = false, on_click = function()
+        storage.set("messages", not get("messages"))
+        ui.close_menu()
+        open_settings()
+      end },
+      { label = "Done", on_click = function() end },
+    },
+  }
+end
+
+ui.add_button{
+  label = "Example settings",
+  on_click = function()
+    if game.in_session() then open_settings() end
+  end,
+}
+
+events.on("session_start", function(e)
+  if get("messages") then ui.toast("Settings example loaded") end
+end)

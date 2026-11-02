@@ -1,0 +1,10 @@
+{
+  "id": "example_interactive_item",
+  "name": "Example: Interactive Item",
+  "description": "A prop with a model, per-object data, an E prompt, damage and wire ports.",
+  "version": "1.0.0",
+  "author": "CHAOS LAB",
+  "api_version": "1.0",
+  "permissions": ["content", "world", "effects", "ui"],
+  "scripts": ["main.chaos"]
+}

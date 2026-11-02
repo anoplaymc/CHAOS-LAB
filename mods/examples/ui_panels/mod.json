@@ -1,0 +1,10 @@
+{
+  "id": "example_ui_panels",
+  "name": "Example: UI Panels",
+  "description": "A HUD panel, a Mod Menu button and a dialog with buttons.",
+  "version": "1.0.0",
+  "author": "CHAOS LAB",
+  "api_version": "1.0",
+  "permissions": ["ui", "effects"],
+  "scripts": ["main.chaos"]
+}

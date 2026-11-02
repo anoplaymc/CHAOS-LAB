@@ -1,0 +1,10 @@
+{
+  "id": "example_settings_menu",
+  "name": "Example: Settings Menu",
+  "description": "Player-changeable settings, kept in storage and edited through a menu.",
+  "version": "1.0.0",
+  "author": "CHAOS LAB",
+  "api_version": "1.0",
+  "permissions": ["ui", "storage"],
+  "scripts": ["main.chaos"]
+}

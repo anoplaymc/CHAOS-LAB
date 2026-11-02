@@ -1,0 +1,31 @@
+-- Panels end with the session, so show them from session_start. Buttons last until the mod unloads.
+local clicks = 0
+
+local function refresh()
+  ui.show_panel{ id = "clicks", title = "Clicks", lines = {"So far: " .. clicks} }
+end
+
+events.on("session_start", function(e)
+  clicks = 0
+  refresh()
+end)
+
+-- Opens with M during play.
+ui.add_button{
+  label = { en = "Open the dialog", ru = "Открыть диалог" },
+  on_click = function()
+    if not game.in_session() then return end
+    ui.open_menu{
+      title = "A dialog",
+      text = "The world keeps running behind this.",
+      buttons = {
+        { label = "Count a click", close = false, on_click = function()
+          clicks = clicks + 1
+          refresh()
+          sound.play("uiClick")
+        end },
+        { label = "Close", on_click = function() end },
+      },
+    }
+  end,
+}

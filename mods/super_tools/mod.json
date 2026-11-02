@@ -1,0 +1,10 @@
+{
+  "id": "super_tools",
+  "name": "Super Tools",
+  "description": "Creative tools: a levitator, a stacker, a vortex gun, a confetti cannon and a bouncy-floor painter.",
+  "version": "1.0.0",
+  "author": "CHAOS LAB",
+  "api_version": "1.0",
+  "permissions": ["content", "world", "effects"],
+  "scripts": ["main.chaos"]
+}

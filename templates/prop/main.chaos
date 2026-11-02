@@ -1,0 +1,22 @@
+register.prop{
+  id = "lamp_post",
+  name = "Lamp Post",
+  desc = "Breaks when hit hard.",
+  category = "props",
+  shape = { type = "cylinder", r = 0.2, h = 2.4 },
+  material = "metal",
+  break_speed = 10,
+  health = 60,
+  debris = "metal",
+  model = {
+    { shape = "cylinder", r = 0.2, h = 0.1, pos = {0, -1.15, 0}, material = "steel_dark" },
+    { shape = "cylinder", r = 0.06, h = 2.2, pos = {0, -0.05, 0}, material = "steel" },
+    { shape = "sphere", r = 0.18, pos = {0, 1.1, 0}, material = "glow_amber" },
+  },
+  on_damage = function(self, amount, source)
+    fx.burst(entity.position(self), 8, 0xffb000, 4)
+  end,
+  on_break = function(self)
+    sound.play("glass", 1, entity.position(self))
+  end,
+}

@@ -1,0 +1,11 @@
+{
+  "id": "furniture_pack",
+  "name": "Furniture Pack",
+  "description": "Office furniture built from primitive parts, with its own soft material, a working lamp and a poster that uses a texture from the mod's assets.",
+  "version": "1.0.0",
+  "author": "CHAOS LAB",
+  "api_version": "1.0",
+  "permissions": ["content", "world", "effects"],
+  "scripts": ["main.chaos"],
+  "assets": ["assets/poster.png"]
+}

@@ -1,0 +1,52 @@
+-- An NPC type. register.* goes at the top level, because it only works while the mod loads.
+register.npc{
+  id = "patroller",
+  name = { en = "Patroller", ru = "Патрульный" },
+  desc = "Walks a route around where it spawned, and goes to look at explosions.",
+  height = 1.7,
+  model = { base = "robot", color = 0x3388ff, accent = 0x20282c },
+  material = "metal",
+  health = 120,
+  walk_speed = 2.2,
+  run_speed = 4.5,
+  sight = 22,
+  hearing = 18,
+  attack = "tracer",
+  attack_range = 16,
+  attack_damage = 6,
+  faction = "lab",        -- fights "rogue" NPCs on sight
+  hostility = "provoked", -- attacks the player only after being hurt by them
+  voice = "robot",
+  on_explosion = "investigate",
+  prompt = "E  Talk",
+  -- Hooks run with the NPC's id. on_spawn runs on its first physics step, when the world exists.
+  on_spawn = function(self)
+    local p = entity.position(self)
+    -- A territory holds whatever the order is: it won't chase or investigate far outside it.
+    npc.set_territory(self, p, 10)
+    npc.patrol(self, {
+      {x = p.x - 4, y = p.y, z = p.z},
+      {x = p.x + 4, y = p.y, z = p.z},
+    })
+  end,
+  on_interact = function(self)
+    npc.say(self, "State: " .. npc.state(self) .. ", order: " .. npc.order(self))
+    return true
+  end,
+  -- The brain finds and fights enemies by itself. This is how a script finds out.
+  on_think = function(self, dt)
+    local seen = npc.enemies_in_sight(self)
+    if seen[1] and not entity.get_data(self, "alerted") then
+      entity.set_data(self, "alerted", true)
+      npc.say(self, "Enemy spotted: " .. entity.def(seen[1]))
+    elseif not seen[1] then
+      entity.set_data(self, "alerted", false)
+    end
+  end,
+  on_damage = function(self, amount, source)
+    if source == "player" then npc.say(self, "Hey, watch it!") end
+  end,
+  on_death = function(self, by_player)
+    fx.explosion(entity.position(self), 2)
+  end,
+}

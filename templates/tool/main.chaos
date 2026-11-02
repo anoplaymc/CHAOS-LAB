@@ -1,0 +1,21 @@
+register.tool{
+  id = "launcher",
+  name = "Launcher",
+  desc = "LMB throws what you aim at upward. RMB freezes it.",
+  view_base = "impulse",
+  hints = { {"LMB", "Launch"}, {"RMB", "Freeze"} },
+  on_primary = function()
+    local hit = physics.aim(40)
+    if hit and hit.entity then
+      entity.apply_impulse(hit.entity, {x = 0, y = entity.mass(hit.entity) * 12, z = 0})
+      fx.ring(hit.point, 1.5, 0x66d9ff)
+      sound.play("spring", 0.8, hit.point)
+    else
+      sound.play("error")
+    end
+  end,
+  on_secondary = function()
+    local hit = physics.aim(40)
+    if hit and hit.entity then entity.freeze(hit.entity, 3) end
+  end,
+}

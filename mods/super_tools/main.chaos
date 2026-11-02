@@ -1,0 +1,151 @@
+-- Super Tools: tools whose whole behaviour is script, and a weapon built on the shared firing code.
+
+local function target(range)
+  local hit = physics.aim(range or 60)
+  if hit and hit.entity and entity.kind(hit.entity) == "prop" then
+    return hit.entity
+  end
+  return nil
+end
+
+-- LMB takes away gravity, RMB gives it back. It remembers which ones it changed.
+local floating = {}
+register.tool{
+  id = "levitator",
+  name = { en = "Levitator", ru = "Левитатор" },
+  desc = { en = "LMB makes an object float, RMB lets it drop.", ru = "ЛКМ заставляет предмет парить, ПКМ опускает его." },
+  view_base = "gravity",
+  hints = { {"LMB", "Float"}, {"RMB", "Drop"} },
+  on_primary = function()
+    local e = target()
+    if not e then sound.play("error"); return end
+    entity.set_gravity_scale(e, -0.05)
+    entity.apply_impulse(e, {x = 0, y = entity.mass(e) * 1.5, z = 0})
+    floating[e] = true
+    fx.ring(entity.position(e), 1.2, 0xa080ff)
+    sound.play("gravity", 0.5, entity.position(e))
+  end,
+  on_secondary = function()
+    local e = target()
+    if e then
+      entity.set_gravity_scale(e, 1)
+      floating[e] = nil
+      sound.play("click")
+    end
+  end,
+  status = function() return "Floating: " .. table.count(floating) end,
+}
+events.on("entity_removed", function(e) floating[e.id] = nil end)
+events.on("session_end", function() floating = {} end)
+
+-- Stacks copies of whatever you point at into a neat tower.
+local stack_height = 3
+register.tool{
+  id = "stacker",
+  name = { en = "Stacker", ru = "Укладчик" },
+  desc = { en = "LMB builds a tower of copies on top of a prop. RMB changes how many.", ru = "ЛКМ строит башню из копий на предмете. ПКМ меняет их число." },
+  view_base = "construction",
+  hints = { {"LMB", "Stack"}, {"RMB", "Change height"} },
+  on_primary = function()
+    local e = target()
+    if not e then sound.play("error"); return end
+    local p = entity.position(e)
+    for i = 1, stack_height do
+      local copy = entity.spawn(entity.def(e), {x = p.x, y = p.y + i * 1.15, z = p.z})
+      if copy then fx.puff(entity.position(copy), 3, 0xc9c5b8, 0.3, 0.4) end
+    end
+    sound.play("place", 0.8, p)
+  end,
+  on_secondary = function()
+    stack_height = stack_height % 8 + 1
+    sound.play("click")
+  end,
+  status = function() return "Height: " .. stack_height end,
+}
+
+-- Holds a swirl of force at the crosshair while the button is down. Uses on_update, so it stays cheap.
+local vortex_on = false
+register.tool{
+  id = "vortex",
+  name = { en = "Vortex Gun", ru = "Вихревая пушка" },
+  desc = { en = "Hold LMB to spin up a whirlwind where you aim.", ru = "Удерживайте ЛКМ, чтобы создать вихрь там, куда смотрите." },
+  view_base = "impulse",
+  energy = 100,
+  hints = { {"LMB", "Hold for vortex"} },
+  on_primary = function() vortex_on = true end,
+  on_primary_up = function() vortex_on = false end,
+  on_unequip = function() vortex_on = false end,
+  on_update = function(dt)
+    if not vortex_on then return end
+    local hit = physics.aim(40)
+    if not hit then return end
+    local c = hit.point
+    fx.ring(c, 3, 0x66d9ff)
+    for _, e in ipairs(entity.find_near(c, 7, { kind = "prop" })) do
+      local p = entity.position(e)
+      local to = vec.sub(c, p)
+      local m = entity.mass(e)
+      local swirl = vec.cross(vec.normalize(to), {x = 0, y = 1, z = 0})
+      entity.apply_impulse(e, vec.scale(vec.add(vec.scale(swirl, 12), {x = to.x, y = 6, z = to.z}), m * dt))
+    end
+  end,
+}
+
+-- A weapon: firing and energy come from the shared code, and on_hit adds the party.
+register.weapon{
+  id = "confetti",
+  name = { en = "Confetti Cannon", ru = "Конфетти-пушка" },
+  desc = { en = "Harmless, loud and pushes things around.", ru = "Безвредная, громкая, расталкивает предметы." },
+  view_base = "blaster",
+  fire = "cone",
+  pellets = 6,
+  spread = 0.07,
+  range = 30,
+  damage = 0,
+  impulse = 220,
+  cooldown = 0.5,
+  energy = 100,
+  energy_regen = 25,
+  cost = 20,
+  beam_color = 0xff4fa3,
+  sound = "bouncer",
+  hints = { {"LMB", "Party"}, {"R", "Reload"} },
+  on_hit = function(hit)
+    local colors = {0xff4fa3, 0xffb000, 0x19e0c4, 0xa080ff}
+    fx.burst(hit.point, 14, colors[math.random(1, 4)], 6, 0.09, 1)
+  end,
+}
+
+-- Places a bouncy pad wherever you point. The pad is a prop this mod registers.
+register.prop{
+  id = "bounce_pad",
+  name = { en = "Bounce Pad", ru = "Прыжковая площадка" },
+  desc = { en = "Launches whatever lands on it.", ru = "Подбрасывает всё, что на неё попадёт." },
+  shape = { type = "box", size = {1.5, 0.2, 1.5} },
+  material = "gel",
+  behavior = "spring_pad",
+  params = { speed = 15 },
+  model = {
+    { shape = "box", size = {1.5, 0.1, 1.5}, pos = {0, -0.05, 0}, material = "steel_dark" },
+    { shape = "rbox", size = {1.3, 0.1, 1.3}, pos = {0, 0.05, 0}, color = 0xff4fa3 },
+  },
+}
+
+register.tool{
+  id = "pad_placer",
+  name = { en = "Pad Placer", ru = "Установщик площадок" },
+  desc = { en = "LMB drops a bounce pad on the floor where you aim.", ru = "ЛКМ ставит прыжковую площадку на пол." },
+  view_base = "spawner",
+  hints = { {"LMB", "Place pad"} },
+  on_primary = function()
+    local hit = physics.aim(40)
+    if hit and hit.normal.y > 0.7 then
+      entity.spawn("bounce_pad", vec.add(hit.point, {x = 0, y = 0.12, z = 0}))
+      sound.play("place")
+    else
+      sound.play("error")
+    end
+  end,
+}
+
+log.info("Super Tools ready")

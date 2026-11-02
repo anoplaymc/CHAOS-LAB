@@ -1,0 +1,10 @@
+{
+  "id": "security_robots",
+  "name": "Security Robots",
+  "description": "A guard robot that patrols a territory you choose, raises the alarm about hostile NPCs and fights them, and responds to explosions, attacks on you and fallen robots. With settings in the Mod Menu.",
+  "version": "1.0.0",
+  "author": "CHAOS LAB",
+  "api_version": "1.0",
+  "permissions": ["content", "world", "effects", "ui", "storage"],
+  "scripts": ["main.chaos"]
+}

@@ -1,0 +1,490 @@
+-- Security Robots: a guard robot that patrols a territory, reports hostile NPCs and reacts to game events.
+-- The engine's brain does the walking and the shooting. This script gives it a territory and a route,
+-- and turns what happens around it into alarms.
+
+local BOT = "guard_bot"
+local ATTACK_RANGE = 18
+local SIGHT = 26
+local COLOR = 0x2f8fd6
+local ALARM_COLOR = 0xff4d3d
+local CLEAR_AFTER = 8        -- seconds with no hostile in sight before the alarm ends
+local REPEAT_AFTER = 6       -- seconds before the same kind of event can raise the alarm again
+
+-- ── Settings ──────────────────────────────────────────────────────────────
+-- There's no settings system in the API: these are values in storage, changed through a menu.
+
+local CHOICES = {
+  patrol_radius = {6, 10, 15, 20},
+  radio_range = {15, 30, 60},
+  firepower = {4, 8, 14},
+}
+local DEFAULTS = {
+  patrol_radius = 10,
+  radio_range = 30,
+  firepower = 8,
+  react_explosions = true,
+  defend_player = true,
+  retaliate = true,
+  announce = true,
+  hud = true,
+}
+
+-- Storage survives between versions of the mod, so anything unexpected in it falls back to the default.
+local function setting(name)
+  local v = storage.get(name)
+  local choices = CHOICES[name]
+  if choices then
+    if table.contains(choices, v) then return v end
+    return DEFAULTS[name]
+  end
+  if type(v) == "boolean" then return v end
+  return DEFAULTS[name]
+end
+
+local function next_choice(name)
+  local list = CHOICES[name]
+  local current = setting(name)
+  for i, v in ipairs(list) do
+    if v == current then return list[i % #list + 1] end
+  end
+  return list[1]
+end
+
+local function t(en, ru)
+  if game.language() == "ru" then return ru end
+  return en
+end
+
+-- ── Shared state, for this session ────────────────────────────────────────
+
+local alarm = nil            -- nil, or {key=, position=, last_contact=}
+local reported = {}          -- hostile id -> true, once it has been reported
+local last_raised = {}       -- alarm key -> game time
+local neutralized = 0
+local panel_shown = false
+
+local function reset_state()
+  alarm = nil
+  reported = {}
+  last_raised = {}
+  neutralized = 0
+  panel_shown = false
+end
+
+local function bots()
+  local out = {}
+  for _, id in ipairs(entity.list({def = mod.full_id(BOT)})) do
+    if npc.state(id) ~= "dead" then table.insert(out, id) end
+  end
+  return out
+end
+
+local function flat_dist(a, b)
+  return math.sqrt((a.x - b.x) * (a.x - b.x) + (a.z - b.z) * (a.z - b.z))
+end
+
+local function post_of(id)
+  return entity.get_data(id, "post") or entity.position(id)
+end
+
+-- Whether a place is something this robot can act on: the same reach the brain's territory allows it to fight in.
+local function in_reach(id, position)
+  return flat_dist(post_of(id), position) <= setting("patrol_radius") + ATTACK_RANGE
+end
+
+local function display_name(def)
+  for _, item in ipairs(game.items("npcs")) do
+    if item.id == def then return item.name end
+  end
+  return def
+end
+
+-- ── Territory and route ───────────────────────────────────────────────────
+
+-- Six points around the post, pulled in from any walls so the route stays walkable.
+local function build_route(id, post, radius)
+  local points = {}
+  local start = id % 6
+  for i = 0, 5 do
+    local angle = (i + start) / 6 * math.pi * 2
+    local dir = {x = math.cos(angle), y = 0, z = math.sin(angle)}
+    local reach = radius * 0.75
+    local origin = vec.add(post, vec.scale(dir, 0.8))
+    local hit = physics.raycast(origin, dir, reach)
+    if hit and hit.entity == nil then reach = math.min(reach, hit.distance + 0.8 - 1) end
+    if reach >= 1.5 then table.insert(points, vec.add(post, vec.scale(dir, reach))) end
+  end
+  return points
+end
+
+local function assign_post(id, post)
+  local radius = setting("patrol_radius")
+  entity.set_data(id, "post", post)
+  entity.set_data(id, "radius", radius)
+  npc.set_territory(id, post, radius)
+  local route = build_route(id, post, radius)
+  if #route >= 2 then
+    npc.patrol(id, route)
+  else
+    -- Nowhere to walk, as in a cupboard: stand watch instead.
+    npc.guard(id, post, math.min(radius, 2))
+  end
+end
+
+local function show_area(id)
+  local post = post_of(id)
+  local radius = setting("patrol_radius")
+  fx.ring(post, radius, COLOR)
+  local route = build_route(id, post, radius)
+  for i, point in ipairs(route) do
+    fx.beam(point, route[i % #route + 1], COLOR, 0.04, 4)
+  end
+end
+
+local function apply_settings()
+  for _, id in ipairs(bots()) do
+    npc.set_attack_damage(id, setting("firepower"))
+    assign_post(id, post_of(id))
+    if not setting("retaliate") then npc.set_provoked(id, false) end
+  end
+end
+
+-- ── Alarms ────────────────────────────────────────────────────────────────
+
+-- Sends robots to a place, without leaving their territories: a target beyond the edge gets them to the edge,
+-- which is close enough to shoot from.
+local function send_to(id, position)
+  local post = post_of(id)
+  local radius = setting("patrol_radius")
+  local gap = flat_dist(post, position)
+  if gap <= radius then
+    npc.alert(id, position)
+  else
+    local k = (radius - 0.5) / gap
+    npc.alert(id, {x = post.x + (position.x - post.x) * k, y = post.y, z = post.z + (position.z - post.z) * k})
+  end
+end
+
+-- Who responds: robots in radio range of the place, that can act on it from their territory.
+local function responders(position)
+  local out = {}
+  local range = setting("radio_range")
+  for _, id in ipairs(bots()) do
+    if in_reach(id, position) and vec.dist(entity.position(id), position) <= range then
+      table.insert(out, id)
+    end
+  end
+  return out
+end
+
+-- reporter may be nil, and then the robot nearest the place reports it.
+local function raise_alarm(key, position, text, reporter)
+  local now = game.time()
+  if last_raised[key] and now - last_raised[key] < REPEAT_AFTER then return false end
+  local team = responders(position)
+  if reporter and not table.contains(team, reporter) then table.insert(team, reporter) end
+  if not team[1] then return false end
+  last_raised[key] = now
+
+  if alarm then
+    alarm.key = key
+    alarm.position = position
+  else
+    alarm = {key = key, position = position, last_contact = now}
+  end
+  alarm.last_contact = now
+
+  for _, id in ipairs(team) do send_to(id, position) end
+
+  log.info("ALARM", key, "responders:", #team)
+  fx.ring(position, 4, ALARM_COLOR)
+  sound.play("npcAlert", 0.8, position)
+  if setting("announce") then npc.say(reporter or team[1], text) end
+  events.emit("security_robots:alarm", {reason = key, position = position, responders = #team})
+  return true
+end
+
+local function clear_alarm()
+  alarm = nil
+  reported = {}
+  log.info("ALL CLEAR")
+  if setting("announce") then ui.toast(t("Security: area clear", "Охрана: территория чиста"), "success") end
+  events.emit("security_robots:all_clear", {neutralized = neutralized})
+end
+
+local function look_for_hostiles(self)
+  local seen = npc.enemies_in_sight(self)
+  for _, enemy in ipairs(seen) do
+    local where = entity.position(enemy)
+    if in_reach(self, where) then
+      if alarm then alarm.last_contact = game.time() end
+      if not reported[enemy] then
+        reported[enemy] = true
+        log.info("CONTACT", entity.def(enemy))
+        local name = display_name(entity.def(enemy))
+        raise_alarm("hostile_" .. enemy, where, t("Hostile detected: ", "Обнаружен враг: ") .. name, self)
+      end
+    end
+  end
+end
+
+-- ── The panel ─────────────────────────────────────────────────────────────
+
+local function update_panel()
+  local count = #bots()
+  if count == 0 or not setting("hud") then
+    if panel_shown then ui.hide_panel("status") end
+    panel_shown = false
+    return
+  end
+  local status = t("Patrolling", "Патрулирование")
+  if alarm then status = t("ALERT", "ТРЕВОГА") end
+  ui.show_panel{
+    id = "status",
+    title = {en = "Security", ru = "Охрана"},
+    lines = {
+      t("Robots: ", "Роботов: ") .. count,
+      t("Status: ", "Статус: ") .. status,
+      t("Hostiles down: ", "Врагов уничтожено: ") .. neutralized,
+    },
+  }
+  panel_shown = true
+end
+
+local function watch()
+  if alarm and game.time() - alarm.last_contact > CLEAR_AFTER then clear_alarm() end
+  update_panel()
+end
+
+-- ── The robot ─────────────────────────────────────────────────────────────
+
+local function state_name(id)
+  local names = {
+    idle = t("on watch", "на посту"),
+    patrol = t("patrolling", "патрулирует"),
+    investigate = t("investigating", "проверяет"),
+    chase = t("pursuing", "преследует"),
+    attack = t("engaging", "в бою"),
+    flee = t("retreating", "отступает"),
+    stunned = t("stunned", "оглушён"),
+  }
+  return names[npc.state(id)] or npc.state(id)
+end
+
+local function open_robot_menu(self)
+  ui.open_menu{
+    title = {en = "Guard Robot", ru = "Робот-охранник"},
+    text = t("Status: ", "Статус: ") .. state_name(self) .. ". "
+      .. t("Territory radius: ", "Радиус территории: ") .. setting("patrol_radius") .. t(" m", " м"),
+    buttons = {
+      {label = {en = "Set territory here", ru = "Территория здесь"}, on_click = function()
+        if not entity.exists(self) then return end
+        assign_post(self, player.position())
+        show_area(self)
+      end},
+      {label = {en = "Show territory", ru = "Показать территорию"}, on_click = function()
+        if entity.exists(self) then show_area(self) end
+      end},
+      {label = {en = "Close", ru = "Закрыть"}, on_click = function() end},
+    },
+  }
+end
+
+register.npc{
+  id = BOT,
+  name = {en = "Guard Robot", ru = "Робот-охранник"},
+  desc = {
+    en = "Patrols the area around where you put it, raises the alarm about hostile NPCs and fights them. Press E for its orders.",
+    ru = "Патрулирует территорию вокруг места, где его поставили, поднимает тревогу из-за враждебных NPC и сражается с ними. E — приказы.",
+  },
+  height = 1.8,
+  model = {
+    base = "robot",
+    color = COLOR,
+    accent = 0x20282c,
+    parts = {
+      {shape = "cylinder", r = 0.03, h = 0.3, pos = {0, 0.35, 0}, material = "steel_dark", attach = "head"},
+      {shape = "sphere", r = 0.07, pos = {0, 0.52, 0}, material = "glow_amber", attach = "head"},
+    },
+  },
+  material = "metal",
+  health = 180,
+  walk_speed = 2.2,
+  run_speed = 4.8,
+  sight = SIGHT,
+  hearing = 18,
+  attack = "tracer",
+  attack_range = ATTACK_RANGE,
+  attack_cooldown = 0.7,
+  attack_damage = DEFAULTS.firepower,
+  faction = "lab",        -- fights "rogue" NPCs on sight
+  hostility = "provoked", -- attacks the player only after being hurt by them
+  voice = "robot",
+  memory = 4,
+  on_explosion = "ignore", -- the script decides, so the setting can turn it off
+  prompt = {en = "E  Orders", ru = "E  Приказы"},
+  on_spawn = function(self)
+    npc.set_attack_damage(self, setting("firepower"))
+    -- on_spawn runs again after loading a saved game, which keeps the post and the route, so that position
+    -- along the route isn't reset. A hot reload keeps only the post, so the order has to be given again.
+    local saved = entity.get_data(self, "post")
+    local same_radius = entity.get_data(self, "radius") == setting("patrol_radius")
+    if saved and same_radius and npc.order(self) ~= "none" then return end
+    assign_post(self, saved or entity.position(self))
+  end,
+  on_think = function(self, dt)
+    look_for_hostiles(self)
+  end,
+  on_interact = function(self)
+    open_robot_menu(self)
+    return true
+  end,
+  on_damage = function(self, amount, source)
+    if source == "player" then
+      if not setting("retaliate") then npc.set_provoked(self, false) end
+    elseif source == "npc" or source == "explosion" then
+      raise_alarm("under_fire", entity.position(self), t("Under attack!", "Меня атакуют!"), self)
+    end
+  end,
+  on_death = function(self, by_player)
+    fx.burst(entity.position(self), 30, ALARM_COLOR)
+    if not by_player then
+      raise_alarm("robot_down", entity.position(self), t("Robot down, send help!", "Робот уничтожен, нужна помощь!"))
+    end
+  end,
+}
+
+-- ── Game events ───────────────────────────────────────────────────────────
+
+events.on("session_start", function(e)
+  reset_state()
+  timer.every(1, watch)
+end)
+
+events.on("explosion", function(e)
+  if setting("react_explosions") then
+    raise_alarm("explosion", e.position, t("Explosion! Checking it out.", "Взрыв! Иду проверять."))
+  end
+end)
+
+-- The player is being shot at: robots in reach go to them, unless it's the robots doing the shooting.
+events.on("player_damaged", function(e)
+  if e.source ~= "npc" or not setting("defend_player") then return end
+  for _, id in ipairs(bots()) do
+    if npc.target(id) == "player" or id == e.attacker then return end
+  end
+  -- Whoever did it counts as hostile, whatever its faction.
+  if e.attacker and npc.is_npc(e.attacker) then
+    for _, id in ipairs(bots()) do
+      if in_reach(id, entity.position(e.attacker)) then npc.attack(id, e.attacker) end
+    end
+  end
+  raise_alarm("player_attacked", player.position(), t("Protecting you!", "Защищаю вас!"))
+end)
+
+events.on("npc_killed", function(e)
+  -- A robot can finish an enemy off before its next look around, so this may be the first we hear of it.
+  if not reported[e.id] and npc.faction(e.id) == "rogue" then
+    for _, id in ipairs(bots()) do
+      if id ~= e.id and in_reach(id, entity.position(e.id)) then
+        reported[e.id] = true
+        log.info("CONTACT", e.def)
+        raise_alarm("hostile_" .. e.id, entity.position(e.id), t("Hostile detected: ", "Обнаружен враг: ") .. display_name(e.def), id)
+        break
+      end
+    end
+  end
+  if reported[e.id] then
+    neutralized = neutralized + 1
+    log.info("NEUTRALIZED", e.def)
+  end
+end)
+
+-- A dead player isn't a threat any more: robots they provoked forgive them on the way back.
+events.on("player_died", function(e)
+  for _, id in ipairs(bots()) do
+    if npc.is_provoked(id) then npc.set_provoked(id, false) end
+  end
+end)
+
+-- ── Settings menu ─────────────────────────────────────────────────────────
+
+local function on_off(name)
+  if setting(name) then return t("on", "вкл") end
+  return t("off", "выкл")
+end
+
+local open_settings
+
+local function choice_button(name, en, ru, unit_en, unit_ru)
+  return {
+    label = t(en, ru) .. ": " .. setting(name) .. t(unit_en, unit_ru),
+    close = false,
+    on_click = function()
+      storage.set(name, next_choice(name))
+      apply_settings()
+      ui.close_menu()
+      open_settings()
+    end,
+  }
+end
+
+local function toggle_button(name, en, ru)
+  return {
+    label = t(en, ru) .. ": " .. on_off(name),
+    close = false,
+    on_click = function()
+      storage.set(name, not setting(name))
+      apply_settings()
+      update_panel()
+      ui.close_menu()
+      open_settings()
+    end,
+  }
+end
+
+open_settings = function()
+  ui.open_menu{
+    title = {en = "Security Robots settings", ru = "Настройки Security Robots"},
+    text = {
+      en = "Kept between sessions. Changes apply at once to the robots already placed.",
+      ru = "Сохраняются между сессиями. Изменения сразу применяются к уже поставленным роботам.",
+    },
+    buttons = {
+      choice_button("patrol_radius", "Territory radius", "Радиус территории", " m", " м"),
+      choice_button("radio_range", "Radio range", "Дальность связи", " m", " м"),
+      choice_button("firepower", "Damage per shot", "Урон за выстрел", "", ""),
+      toggle_button("react_explosions", "React to explosions", "Реакция на взрывы"),
+      toggle_button("defend_player", "Defend the player", "Защищать игрока"),
+      toggle_button("retaliate", "Shoot back at the player", "Отвечать игроку на огонь"),
+      toggle_button("announce", "Voice messages", "Голосовые сообщения"),
+      toggle_button("hud", "Status panel", "Панель статуса"),
+      {label = {en = "All territories to my position", ru = "Все территории ко мне"}, on_click = function()
+        for _, id in ipairs(bots()) do
+          assign_post(id, player.position())
+          show_area(id)
+        end
+      end},
+      {label = {en = "Reset to defaults", ru = "Сбросить настройки"}, close = false, on_click = function()
+        for name in pairs(DEFAULTS) do storage.delete(name) end
+        apply_settings()
+        update_panel()
+        ui.close_menu()
+        open_settings()
+      end},
+      {label = {en = "Done", ru = "Готово"}, on_click = function() end},
+    },
+  }
+end
+
+ui.add_button{
+  label = {en = "Security Robots settings", ru = "Настройки Security Robots"},
+  on_click = function()
+    if game.in_session() then open_settings() end
+  end,
+}
+
+-- A mod enabled or reloaded during a session misses that session's session_start.
+if game.in_session() then
+  timer.every(1, watch)
+end

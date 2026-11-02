@@ -1,0 +1,14 @@
+{
+  "id": "chaos_playground",
+  "name": "Chaos Playground",
+  "description": "A map and a game mode where scripted disasters arrive on a timer. Survive for three minutes. Uses furniture from the Furniture Pack, and robots if the Robot Pack is on.",
+  "version": "1.0.0",
+  "author": "CHAOS LAB",
+  "api_version": "1.0",
+  "dependencies": [
+    { "id": "furniture_pack", "version": "^1.0.0" },
+    { "id": "robot_pack", "version": "^1.0.0", "optional": true }
+  ],
+  "permissions": ["content", "world", "effects", "ui", "storage", "rules"],
+  "scripts": ["arena.chaos", "main.chaos"]
+}

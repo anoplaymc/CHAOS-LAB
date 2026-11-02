@@ -1,0 +1,155 @@
+-- Chaos Playground: a scripted mode. Disasters are plain functions in a table, so adding one is just adding a function.
+
+local DURATION = 180
+local GAP = 12
+
+local arena_radius = 30
+local function random_point(height)
+  return { x = math.random(-arena_radius, arena_radius), y = height, z = math.random(-arena_radius, arena_radius) }
+end
+
+local disasters = {}
+
+function disasters.meteor_shower()
+  ui.toast("Meteor shower!", "warn")
+  for i = 0, 11 do
+    timer.after(i * 0.4, function()
+      local p = random_point(25)
+      local id = entity.spawn("barrel_explosive", p, { velocity = {x = 0, y = -20, z = 0} })
+      if id then entity.set_data(id, "meteor", true) end
+    end)
+  end
+end
+
+function disasters.crate_rain()
+  ui.toast("Crate rain!", "warn")
+  for i = 1, 24 do
+    timer.after(i * 0.1, function()
+      entity.spawn("crate_wood", random_point(18 + math.random(0, 6)))
+    end)
+  end
+end
+
+function disasters.gravity_flip()
+  ui.toast("Gravity failure!", "warn")
+  sound.play("gravity")
+  game.set_gravity(-2)
+  fx.shake(0.6)
+  timer.after(4, function()
+    game.set_gravity(9.81)
+    ui.toast("Gravity restored", "success")
+  end)
+end
+
+function disasters.shockwave()
+  ui.toast("Shockwave!", "warn")
+  local p = player.position()
+  timer.after(1, function()
+    fx.ring(p, 14, 0xff4030)
+    game.shockwave(p, 14, 2600, 8)
+  end)
+end
+
+function disasters.furniture_storm()
+  ui.toast("Furniture storm!", "warn")
+  for i = 1, 8 do
+    timer.after(i * 0.2, function()
+      local id = entity.spawn("furniture_pack:dining_chair", random_point(16))
+      if id then entity.set_velocity(id, {x = math.random(-10, 10), y = 0, z = math.random(-10, 10)}) end
+    end)
+  end
+end
+
+-- Only available when the optional dependency is there.
+function disasters.robot_raid()
+  if not mod.is_loaded("robot_pack") then
+    return disasters.crate_rain()
+  end
+  ui.toast("Robots incoming!", "error")
+  for i = 1, 3 do
+    entity.spawn("robot_pack:skirmisher", random_point(2))
+  end
+  entity.spawn("robot_pack:kamikaze", random_point(2))
+end
+
+local names = table.keys(disasters)
+
+local function trigger(name)
+  name = name or names[math.random(1, #names)]
+  log.info("Disaster:", name)
+  disasters[name]()
+end
+
+-- Any script can start a disaster by sending this event. The button in arena.chaos does.
+events.on("chaos_playground:disaster", function(e)
+  trigger(e.name)
+end)
+
+ui.add_button{
+  label = { en = "Trigger a disaster", ru = "Вызвать бедствие" },
+  on_click = function()
+    if game.in_session() then trigger() end
+  end,
+}
+
+local survived = 0
+local next_disaster = GAP
+local deaths = 0
+local running = false
+
+events.on("player_died", function()
+  if running then deaths = deaths + 1 end
+end)
+
+register.mode{
+  id = "survive",
+  name = { en = "Chaos Hour", ru = "Час хаоса" },
+  desc = { en = "Stay alive for three minutes while the arena tries to kill you.", ru = "Продержитесь три минуты, пока арена пытается вас убить." },
+  map = "arena",
+  tools = { "manipulator", "impulse", "freeze" },
+  aggression = "normal",
+  respawn = false,
+  on_start = function()
+    survived = 0
+    next_disaster = GAP
+    deaths = 0
+    running = true
+    game.set_gravity(9.81)
+    ui.toast("Survive for three minutes!", "info")
+  end,
+  on_tick = function(dt)
+    survived = survived + dt
+    next_disaster = next_disaster - dt
+    if next_disaster <= 0 then
+      next_disaster = math.max(5, GAP - survived / 30)
+      trigger()
+    end
+    if survived >= DURATION then
+      running = false
+      local best = storage.get("best_deaths")
+      if best == nil or deaths < best then storage.set("best_deaths", deaths) end
+      mode.finish{
+        win = deaths == 0,
+        title = deaths == 0 and "Untouched!" or "You made it",
+        detail = "Deaths: " .. deaths .. ". Best: " .. tostring(storage.get("best_deaths")) .. ".",
+        can_continue = true,
+      }
+    end
+  end,
+  on_end = function()
+    running = false
+  end,
+  hud = function()
+    local left = math.max(0, math.ceil(DURATION - survived))
+    return {
+      title = "Chaos Hour",
+      lines = {
+        "Time left: " .. math.floor(left / 60) .. ":" .. (left % 60 < 10 and "0" or "") .. left % 60,
+        "Next disaster: " .. math.ceil(next_disaster) .. "s",
+        "Deaths: " .. deaths,
+      },
+    }
+  end,
+}
+
+log.info("Chaos Playground ready with", #names, "disasters")

@@ -1,0 +1,10 @@
+{
+  "id": "example_event_reactions",
+  "name": "Example: Event Reactions",
+  "description": "Reacting to game events, custom events and timers.",
+  "version": "1.0.0",
+  "author": "CHAOS LAB",
+  "api_version": "1.0",
+  "permissions": ["world", "effects", "ui"],
+  "scripts": ["main.chaos"]
+}

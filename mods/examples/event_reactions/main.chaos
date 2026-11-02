@@ -1,0 +1,29 @@
+-- A handler receives one table. Its fields for each event are listed in the API reference.
+-- Handlers stay across sessions. Timers end with the session, so start them from session_start.
+local explosions = 0
+
+events.on("session_start", function(e)
+  explosions = 0
+  log.info("Session on", e.map, "in mode", e.mode)
+  timer.every(30, function()
+    ui.toast("Explosions so far: " .. explosions)
+  end)
+end)
+
+events.on("explosion", function(e)
+  explosions = explosions + 1
+  -- Tell every NPC within range to go and look. Removed entities are safe: calls just return nil.
+  for _, id in ipairs(entity.find_near(e.position, 25, {kind = "npc"})) do
+    npc.alert(id, e.position)
+  end
+  -- Other mods can listen for this. They each get a copy of the data.
+  events.emit("example_event_reactions:big_noise", {count = explosions})
+end)
+
+events.on("npc_killed", function(e)
+  if e.by_player then ui.toast("You got one", "warn") end
+end)
+
+events.on("example_event_reactions:big_noise", function(e)
+  if e.count % 5 == 0 then fx.shake(0.3) end
+end)

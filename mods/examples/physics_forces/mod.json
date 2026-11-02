@@ -1,0 +1,10 @@
+{
+  "id": "example_physics_forces",
+  "name": "Example: Physics Forces",
+  "description": "Raycasts, impulses, gravity scale and a custom material.",
+  "version": "1.0.0",
+  "author": "CHAOS LAB",
+  "api_version": "1.0",
+  "permissions": ["content", "world", "effects"],
+  "scripts": ["main.chaos"]
+}

@@ -1,0 +1,79 @@
+-- Vehicle Pack: custom vehicles with their own suspension, engines and wheel layouts.
+
+register.vehicle{
+  id = "monster",
+  name = { en = "Monster Truck", ru = "Монстр-трак" },
+  desc = { en = "Huge wheels, long suspension, poor judgement.", ru = "Огромные колёса, длинная подвеска, сомнительные решения." },
+  size = {x = 1.9, y = 0.7, z = 3},
+  material = "metal",
+  model = {
+    { shape = "rbox", size = {1.9, 0.5, 3}, pos = {0, 0.05, 0}, color = 0x2277cc },
+    { shape = "rbox", size = {1.5, 0.6, 1.3}, pos = {0, 0.55, 0.1}, color = 0x1a5a9a },
+    { shape = "box", size = {1.4, 0.4, 0.05}, pos = {0, 0.6, -0.56}, material = "screen" },
+    { shape = "box", size = {1.9, 0.12, 0.2}, pos = {0, -0.1, -1.55}, material = "steel_dark" },
+    { shape = "sphere", r = 0.1, pos = {-0.65, 0.1, -1.52}, material = "glow_amber" },
+    { shape = "sphere", r = 0.1, pos = {0.65, 0.1, -1.52}, material = "glow_amber" },
+  },
+  wheels = {
+    {x = -1.1, y = -0.2, z = -1.1},
+    {x = 1.1, y = -0.2, z = -1.1},
+    {x = -1.1, y = -0.2, z = 1.1},
+    {x = 1.1, y = -0.2, z = 1.1},
+  },
+  wheel_radius = 0.72,
+  suspension = 0.7,
+  engine = 2100,
+  top_speed = 24,
+  steer = 0.55,
+  grip = 3.4,
+  stiffness = 18,
+  density = 130,
+  wheel_color = 0x181818,
+}
+
+-- Three wheels. The one with negative z steers, and the two at the back drive harder.
+register.vehicle{
+  id = "trike",
+  name = { en = "Lab Trike", ru = "Лабораторный трицикл" },
+  desc = { en = "Nimble and easy to tip over.", ru = "Манёвренный, легко опрокидывается." },
+  size = {x = 0.9, y = 0.45, z = 1.9},
+  material = "metal",
+  model = {
+    { shape = "rbox", size = {0.5, 0.3, 1.9}, color = 0xd9822b },
+    { shape = "rbox", size = {0.42, 0.4, 0.6}, pos = {0, 0.3, 0.3}, material = "blackened" },
+    { shape = "cylinder", r = 0.03, h = 0.5, pos = {0, 0.3, -0.5}, material = "steel" },
+  },
+  wheels = {
+    {x = 0, y = -0.1, z = -0.85},
+    {x = -0.6, y = -0.1, z = 0.7},
+    {x = 0.6, y = -0.1, z = 0.7},
+  },
+  wheel_radius = 0.32,
+  suspension = 0.3,
+  engine = 600,
+  top_speed = 20,
+  steer = 0.7,
+  grip = 2.8,
+  stiffness = 30,
+  density = 110,
+  wheel_color = 0x222222,
+}
+
+register.sound{
+  id = "horn",
+  layers = {
+    { freq = 392, dur = 0.35, vol = 0.22, wave = "sawtooth" },
+    { freq = 494, dur = 0.35, vol = 0.18, wave = "sawtooth" },
+  },
+}
+
+ui.add_button{
+  label = { en = "Honk", ru = "Посигналить" },
+  on_click = function()
+    if game.in_session() then
+      sound.play("horn", 1, player.position())
+    end
+  end,
+}
+
+log.info("Vehicle Pack ready")

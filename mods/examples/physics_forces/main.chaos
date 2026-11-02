@@ -1,0 +1,51 @@
+-- A material of your own: friction, bounce and weight.
+register.material{
+  id = "super_bouncy",
+  name = "Super Bouncy",
+  friction = 0.4,
+  restitution = 1.1,
+  density = 40,
+  sound = "gel",
+  fragility = 0,
+}
+
+register.prop{
+  id = "bouncer",
+  name = "Bouncing Orb",
+  shape = { type = "sphere", r = 0.4 },
+  material = "super_bouncy",
+  color = 0xff4fa3,
+}
+
+-- Impulses are force times time: multiply by mass to get a change in speed that suits any object.
+-- A ray straight down finds the ground, and overlap_sphere finds what's touching a place.
+register.tool{
+  id = "repulsor",
+  name = "Repulsor",
+  desc = "LMB pushes everything near the crosshair away. RMB makes the aimed object float.",
+  view_base = "gravity",
+  hints = { {"LMB", "Repel"}, {"RMB", "Float"} },
+  on_primary = function()
+    local hit = physics.aim(40)
+    if not hit then return end
+    for _, id in ipairs(physics.overlap_sphere(hit.point, 6)) do
+      local away = vec.normalize(vec.sub(entity.position(id), hit.point))
+      entity.apply_impulse(id, vec.scale(away, entity.mass(id) * 8))
+    end
+    fx.ring(hit.point, 6, 0xa080ff)
+  end,
+  on_secondary = function()
+    local hit = physics.aim(40)
+    if hit and hit.entity then
+      entity.set_gravity_scale(hit.entity, 0)
+      entity.set_damping(hit.entity, 1.5, 1.5)
+    end
+  end,
+}
+
+events.on("session_start", function(e)
+  local ground = physics.raycast({x = 0, y = 20, z = 25}, {x = 0, y = -1, z = 0}, 60)
+  if ground then
+    entity.spawn("bouncer", vec.add(ground.point, {x = 0, y = 3, z = 0}))
+  end
+end)

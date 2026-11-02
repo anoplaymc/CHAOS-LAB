@@ -1,0 +1,153 @@
+-- Robot Pack: new NPC types, built on the framework's behaviours plus a little script.
+
+-- A fast rogue skirmisher. Everything here is data: no script needed.
+register.npc{
+  id = "skirmisher",
+  name = { en = "Skirmisher", ru = "Застрельщик" },
+  desc = { en = "Fast and lightly armoured. Chases hard and shoots often.", ru = "Быстрый, легко бронированный. Настойчиво преследует и часто стреляет." },
+  height = 1.45,
+  model = {
+    base = "robot", color = 0x8a3ad6, accent = 0x241a33,
+    parts = {
+      { shape = "cone", r = 0.09, h = 0.3, pos = {0, 0.32, 0}, material = "glow_violet", attach = "head" },
+    },
+  },
+  material = "metal",
+  health = 45,
+  walk_speed = 3.2,
+  run_speed = 6.5,
+  sight = 30,
+  hearing = 20,
+  attack = "bolt",
+  attack_range = 14,
+  attack_cooldown = 0.6,
+  attack_damage = 6,
+  faction = "rogue",
+  hostility = "always",
+  voice = "robot",
+  personality = "hyper",
+}
+
+-- A turret on legs that guards where it was placed and sweeps a visible beam while watching.
+register.npc{
+  id = "turret",
+  name = { en = "Sentry Turret", ru = "Турель" },
+  desc = { en = "Stays near where you put it and shoots rogue bots, or you if you hit it.", ru = "Остаётся там, где поставили, и стреляет по роботам-бунтарям, а если ударите, то и по вам." },
+  height = 1.3,
+  radius = 0.45,
+  model = {
+    base = "heavy", color = 0xd9b02b, accent = 0x30343a,
+    parts = {
+      { shape = "cylinder", r = 0.07, h = 0.9, pos = {0, 0.6, -0.5}, rot = {1.57, 0, 0}, material = "steel_dark", attach = "torso" },
+    },
+  },
+  material = "metal",
+  health = 220,
+  walk_speed = 0.6,
+  run_speed = 1,
+  sight = 26,
+  attack = "tracer",
+  attack_range = 24,
+  attack_cooldown = 0.45,
+  attack_damage = 5,
+  faction = "lab",
+  hostility = "provoked",
+  voice = "robot",
+  behavior = "guard",
+  guard_radius = 2,
+  personality = "brave",
+  on_think = function(self, dt)
+    if npc.state(self) == "idle" then
+      local p = entity.position(self)
+      local t = game.time()
+      local dir = { x = math.sin(t), y = -0.05, z = math.cos(t) }
+      fx.beam(p, vec.add(p, vec.scale(dir, 6)), 0xd9b02b, 0.01, 0.3)
+    end
+  end,
+}
+
+-- Runs at you and blows itself up. attack = "script" hands the attack to on_attack.
+register.npc{
+  id = "kamikaze",
+  name = { en = "Kamikaze Drone", ru = "Дрон-камикадзе" },
+  desc = { en = "Rushes its target and detonates. Also detonates when destroyed.", ru = "Бросается на цель и взрывается. Взрывается и при уничтожении." },
+  height = 0.9,
+  radius = 0.32,
+  model = {
+    base = "creature", color = 0xe8432f,
+    parts = { { shape = "sphere", r = 0.12, pos = {0, 0.3, 0}, material = "glow_coral" } },
+  },
+  material = "metal",
+  health = 20,
+  walk_speed = 3,
+  run_speed = 7.5,
+  sight = 28,
+  attack = "script",
+  attack_range = 2.2,
+  attack_cooldown = 0.3,
+  faction = "rogue",
+  hostility = "always",
+  voice = "robot",
+  on_attack = function(self, target, target_entity)
+    entity.damage(self, 1000)
+  end,
+  on_death = function(self, by_player)
+    game.explode(entity.position(self), 4, 700, 45)
+    entity.remove(self)
+  end,
+}
+
+-- A friendly repair bot. E toggles following, and it heals damaged lab robots nearby.
+register.npc{
+  id = "repair_bot",
+  name = { en = "Repair Bot", ru = "Ремонтный бот" },
+  desc = { en = "Press E and it follows you. Repairs other robots on your side.", ru = "Нажмите E, и он пойдёт за вами. Чинит других роботов на вашей стороне." },
+  height = 1.1,
+  model = {
+    base = "robot", color = 0x2fb56a, accent = 0xe8e6dc,
+    parts = { { shape = "torus", r = 0.2, tube = 0.03, pos = {0, 0.55, 0}, rot = {1.57, 0, 0}, material = "glow_teal", attach = "head" } },
+  },
+  material = "metal",
+  health = 90,
+  walk_speed = 2.6,
+  run_speed = 4.5,
+  faction = "lab",
+  flees_when_hurt = true,
+  voice = "robot",
+  prompt = { en = "E  Follow / stay", ru = "E  За мной / стоять" },
+  on_interact = function(self)
+    if npc.order(self) == "follow" then
+      npc.stop(self)
+      npc.say(self, "Staying here.")
+    else
+      npc.follow(self, nil, 3)
+      npc.say(self, "Coming with you.")
+    end
+    return true
+  end,
+  on_think = function(self, dt)
+    local here = entity.position(self)
+    for _, other in ipairs(entity.find_near(here, 6, { kind = "npc" })) do
+      if other ~= self and npc.state(other) ~= "dead" and entity.health(other) < entity.max_health(other) then
+        entity.set_health(other, entity.health(other) + 2)
+        fx.beam(here, entity.position(other), 0x2fb56a, 0.02, 0.2)
+      end
+    end
+  end,
+}
+
+-- One button in the spawn menu that places a whole squad at the crosshair.
+register.effect{
+  id = "squad",
+  name = { en = "Deploy Rogue Squad", ru = "Вызвать отряд" },
+  desc = { en = "Two skirmishers and a kamikaze drone arrive where you aim.", ru = "Два застрельщика и дрон-камикадзе появляются там, куда вы смотрите." },
+  on_use = function(pos)
+    fx.ring(pos, 4, 0x8a3ad6)
+    entity.spawn("skirmisher", vec.add(pos, {x = -2, y = 1, z = 0}))
+    entity.spawn("skirmisher", vec.add(pos, {x = 2, y = 1, z = 0}))
+    entity.spawn("kamikaze", vec.add(pos, {x = 0, y = 1, z = -2}))
+    ui.toast("Squad deployed", "warn")
+  end,
+}
+
+log.info("Robot Pack ready")

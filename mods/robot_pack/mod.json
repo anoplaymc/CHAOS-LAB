@@ -1,0 +1,10 @@
+{
+  "id": "robot_pack",
+  "name": "Robot Pack",
+  "description": "Four new robots: a fast skirmisher, a stationary turret, a kamikaze drone and a friendly repair bot that follows you when asked.",
+  "version": "1.0.0",
+  "author": "CHAOS LAB",
+  "api_version": "1.0",
+  "permissions": ["content", "world", "effects", "ui"],
+  "scripts": ["main.chaos"]
+}

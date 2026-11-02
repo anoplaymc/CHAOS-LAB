@@ -1,0 +1,10 @@
+{
+  "id": "vehicle_pack",
+  "name": "Vehicle Pack",
+  "description": "A tall monster truck and a three-wheeled trike, with a horn in the Mod Menu (M).",
+  "version": "1.0.0",
+  "author": "CHAOS LAB",
+  "api_version": "1.0",
+  "permissions": ["content", "effects", "ui"],
+  "scripts": ["main.chaos"]
+}

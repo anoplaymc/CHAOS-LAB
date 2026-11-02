@@ -1,0 +1,38 @@
+-- A prop with a model made of parts, a state per object, and wire ports.
+register.prop{
+  id = "generator",
+  name = "Generator",
+  desc = "Press E to switch it on. Its wire output follows. It breaks if hit hard.",
+  shape = { type = "box", size = {1, 1, 1} },
+  material = "metal",
+  break_speed = 14,
+  health = 80,
+  debris = "metal",
+  signal = "out",
+  prompt = "E  Switch",
+  tick_rate = 0.5,
+  model = {
+    { shape = "rbox", size = {1, 1, 1}, material = "steel_dark" },
+    { shape = "cylinder", r = 0.2, h = 0.1, pos = {0, 0.55, 0}, material = "paint_amber" },
+  },
+  -- entity.set_data stays with this object, and in saved games.
+  on_interact = function(self)
+    local on = not entity.get_data(self, "on")
+    entity.set_data(self, "on", on)
+    entity.set_signal(self, on)
+    entity.set_tint(self, on and 0x66ff99 or nil)
+    ui.toast(on and "Generator on" or "Generator off")
+    return true
+  end,
+  on_tick = function(self, dt)
+    if entity.get_data(self, "on") then
+      fx.puff(entity.position(self), 1, 0xcccccc, 0.3, 0.8)
+    end
+  end,
+  on_damage = function(self, amount, source)
+    fx.burst(entity.position(self), 6, 0xffb000, 3)
+  end,
+  on_break = function(self)
+    game.explode(entity.position(self), 3, 400, 10)
+  end,
+}

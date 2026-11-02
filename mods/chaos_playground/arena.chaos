@@ -1,0 +1,57 @@
+-- The map. It's in its own file to show that a mod can have several scripts. Files run in the order listed in mod.json.
+
+local blocks = {
+  { pos = {0, -0.5, 0}, size = {70, 1, 70}, material = "platform_mint" },
+  { pos = {0, 2, -35.5}, size = {71, 6, 1}, material = "container_blue" },
+  { pos = {0, 2, 35.5}, size = {71, 6, 1}, material = "container_red" },
+  { pos = {-35.5, 2, 0}, size = {1, 6, 71}, material = "container_amber" },
+  { pos = {35.5, 2, 0}, size = {1, 6, 71}, material = "corrugated_teal" },
+  { pos = {-14, 0.75, -14}, size = {8, 1.5, 8}, material = "platform_candy" },
+  { pos = {14, 1.25, 14}, size = {8, 2.5, 8}, material = "platform_candy" },
+  { pos = {14, 0.5, -14}, size = {6, 1, 6}, material = "hazard" },
+  { pos = {-14, 0.5, 14}, size = {6, 1, 6}, material = "hazard" },
+}
+
+local props = {
+  { id = "big_red_button", pos = {0, 0.35, 0} },
+}
+-- A ring of the Furniture Pack's chairs around the middle, facing inward.
+for i = 1, 10 do
+  local a = i / 10 * math.pi * 2
+  table.insert(props, { id = "furniture_pack:dining_chair", pos = {math.cos(a) * 8, 0.55, math.sin(a) * 8}, yaw = a })
+end
+table.insert(props, { id = "furniture_pack:dining_table", pos = {-14, 1.95, -14} })
+table.insert(props, { id = "furniture_pack:wardrobe", pos = {14, 3.65, 14} })
+
+register.prop{
+  id = "big_red_button",
+  name = { en = "Big Red Button", ru = "Большая красная кнопка" },
+  desc = { en = "Do not press.", ru = "Не нажимать." },
+  shape = { type = "cylinder", r = 0.7, h = 0.5 },
+  material = "metal",
+  body = "fixed",
+  prompt = { en = "E  Press (don't)", ru = "E  Нажать (не надо)" },
+  disintegrable = false,
+  model = {
+    { shape = "cylinder", r = 0.7, h = 0.2, pos = {0, -0.15, 0}, material = "steel_dark" },
+    { shape = "cylinder", r = 0.5, h = 0.3, pos = {0, 0.1, 0}, material = "paint_coral" },
+  },
+  on_interact = function(self)
+    events.emit("chaos_playground:disaster", { source = "button" })
+    return true
+  end,
+}
+
+register.map{
+  id = "arena",
+  name = { en = "Chaos Arena", ru = "Арена хаоса" },
+  desc = { en = "A walled arena with a very tempting button in the middle.", ru = "Арена со стенами и очень соблазнительной кнопкой в центре." },
+  spawn = {x = 0, y = 0, z = 22},
+  blocks = blocks,
+  props = props,
+  sky = "dusk",
+  zones = {
+    { type = "pad", min = {x = 13, y = 0.5, z = -15}, max = {x = 15, y = 2, z = -13}, speed = 16 },
+    { type = "pad", min = {x = -15, y = 0.5, z = 13}, max = {x = -13, y = 2, z = 15}, speed = 16 },
+  },
+}

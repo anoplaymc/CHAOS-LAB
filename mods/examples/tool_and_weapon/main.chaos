@@ -1,0 +1,47 @@
+-- A tool: nothing happens unless a callback does it. physics.aim says what's under the crosshair.
+local power = 10
+
+register.tool{
+  id = "launcher",
+  name = "Launcher",
+  desc = "LMB throws what you aim at upward. RMB changes the power.",
+  view_base = "impulse",
+  hints = { {"LMB", "Launch"}, {"RMB", "Change power"} },
+  on_primary = function()
+    local hit = physics.aim(40)
+    if hit and hit.entity then
+      entity.apply_impulse(hit.entity, {x = 0, y = entity.mass(hit.entity) * power, z = 0})
+      fx.ring(hit.point, 1.5, 0x66d9ff)
+      sound.play("spring", 0.8, hit.point)
+    else
+      sound.play("error")
+    end
+  end,
+  on_secondary = function()
+    power = power % 30 + 10
+    sound.play("click")
+  end,
+  status = function() return "Power: " .. power end,
+}
+
+-- A weapon: with fire set, the shared code handles shots, energy and hits.
+register.weapon{
+  id = "pulse_rifle",
+  name = "Pulse Rifle",
+  desc = "Quick bursts. Overheats if you hold it down.",
+  view_base = "blaster",
+  fire = "hitscan",
+  automatic = true,
+  damage = 8,
+  impulse = 60,
+  range = 70,
+  cooldown = 0.12,
+  energy = 100,
+  energy_regen = 18,
+  cost = 7,
+  beam_color = 0x88aaff,
+  hints = { {"LMB", "Fire"}, {"R", "Vent"} },
+  on_hit = function(hit)
+    fx.burst(hit.point, 6, 0x88aaff, 4)
+  end,
+}

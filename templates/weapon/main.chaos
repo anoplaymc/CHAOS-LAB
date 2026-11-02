@@ -1,0 +1,22 @@
+-- Firing, energy and hits come from the shared code, so a weapon can be all data.
+register.weapon{
+  id = "pulse_rifle",
+  name = "Pulse Rifle",
+  desc = "Quick bursts. Pushes things, and overheats if you hold it down.",
+  view_base = "blaster",
+  fire = "hitscan",
+  automatic = true,
+  damage = 8,
+  impulse = 60,
+  range = 70,
+  cooldown = 0.12,
+  energy = 100,
+  energy_regen = 18,
+  cost = 7,
+  beam_color = 0x88aaff,
+  sound = "blaster",
+  hints = { {"LMB", "Fire"}, {"R", "Vent"} },
+  on_hit = function(hit)
+    fx.burst(hit.point, 6, 0x88aaff, 4)
+  end,
+}
